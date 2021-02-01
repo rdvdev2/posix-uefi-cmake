@@ -36,7 +36,7 @@ Distributing as Source
 
 This is the preferred way, as it also provides a Makefile to set up your toolchain properly.
 
- 1. simply copy the `uefi` directory into your source tree (or set up a git submodule). Twelfe files, about 140K in total.
+ 1. simply copy the `uefi` directory into your source tree (or set up a git submodule). A dozen files, about 140K in total.
  2. create an extremely simple **Makefile** like below
  3. compile your code for UEFI by running `make`
 
