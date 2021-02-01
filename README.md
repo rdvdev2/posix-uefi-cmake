@@ -14,7 +14,7 @@ To use it, you have two options:
 Distributing as Static Library
 ------------------------------
 
-In the `uefi` library, run
+In the `uefi` directory, run
 ```sh
 $ make
 ```
