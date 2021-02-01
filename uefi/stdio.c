@@ -32,18 +32,6 @@
 
 static efi_file_handle_t *__root_dir = NULL;
 
-void __stdio_init()
-{
-    efi_status_t status;
-    efi_guid_t sfsGuid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
-    efi_simple_file_system_protocol_t *sfs = NULL;
-    if(!__root_dir && LIP) {
-        status = uefi_call_wrapper(BS->HandleProtocol, 3, LIP->DeviceHandle, &sfsGuid, &sfs);
-        if(!EFI_ERROR(status))
-            status = uefi_call_wrapper(sfs->OpenVolume, 2, sfs, &__root_dir);
-    }
-}
-
 int fclose (FILE *__stream)
 {
     efi_status_t status = uefi_call_wrapper(__stream->Close, 1, __stream);
@@ -61,12 +49,18 @@ FILE *fopen (const wchar_t *__filename, const char *__modes)
 {
     FILE *ret;
     efi_status_t status;
-    __stdio_init();
-    errno = 0;
+    efi_guid_t sfsGuid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
+    efi_simple_file_system_protocol_t *sfs = NULL;
+    if(!__root_dir && LIP) {
+        status = uefi_call_wrapper(BS->HandleProtocol, 3, LIP->DeviceHandle, &sfsGuid, &sfs);
+        if(!EFI_ERROR(status))
+            status = uefi_call_wrapper(sfs->OpenVolume, 2, sfs, &__root_dir);
+    }
     if(!__root_dir) {
         errno = ENODEV;
         return NULL;
     }
+    errno = 0;
     ret = (FILE*)malloc(sizeof(FILE));
     if(!ret) return NULL;
     status = uefi_call_wrapper(__root_dir->Open, 5, __root_dir, ret, __filename,
