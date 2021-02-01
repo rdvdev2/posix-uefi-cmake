@@ -9,7 +9,7 @@ This is a very small library (32k) that helps you to develop for UEFI under Linu
 inspired by [gnu-efi](https://sourceforge.net/projects/gnu-efi) (big big kudos to those guys), but it is a lot smaller,
 easier to integrate (works with Clang and GNU gcc both) and easier to use because it provides a POSIX like API.
 
-To use it, you have to options:
+To use it, you have two options:
 
 Distributing as Static Library
 ------------------------------
