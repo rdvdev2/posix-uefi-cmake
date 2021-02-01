@@ -1,4 +1,4 @@
-/**
+/*
  * stdio.c
  *
  * Copyright (C) 2021 bzt (bztsrc@gitlab)

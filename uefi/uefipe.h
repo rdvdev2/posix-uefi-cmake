@@ -1,4 +1,4 @@
-/**
+/*
  * uefipe.h
  *
  * Copyright (C) 2021 bzt (bztsrc@gitlab)
