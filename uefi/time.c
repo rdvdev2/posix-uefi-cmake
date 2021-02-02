@@ -35,10 +35,11 @@ static struct tm __tm;
 /**
  * This isn't POSIX, no arguments. Just returns the current time in struct tm
  */
-struct tm *localtime ()
+struct tm *localtime (const time_t *__timer)
 {
-    efi_time_t t;
-    uefi_call_wrapper(ST->RuntimeServices->GetTime, 2, &t, NULL);
+    efi_time_t t = {0};
+    (void)__timer;
+    ST->RuntimeServices->GetTime(&t, NULL);
     __tm.tm_year = t.Year + 98;
     __tm.tm_mon = t.Month - 1;
     __tm.tm_mday = t.Day;

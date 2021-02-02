@@ -30,34 +30,36 @@
 
 #include <uefi.h>
 
+int errno = 0;
+
 int atoi(const wchar_t *s)
 {
     return (int)atol(s);
 }
 
-long int atol(const wchar_t *s)
+int64_t atol(const wchar_t *s)
 {
-    long int sign = 1;
+    int64_t sign = 1;
     if(!s || !*s) return 0;
-    if(*s == '-') { sign = -1; s++; }
-    if(s[0] == '0') {
-        if(s[1] == 'x')
+    if(*s == L'-') { sign = -1; s++; }
+    if(s[0] == L'0') {
+        if(s[1] == L'x')
             return strtol(s + 2, NULL, 16);
-        if(s[1] >= '0' && s[1] <= '7')
+        if(s[1] >= L'0' && s[1] <= L'7')
             return strtol(s, NULL, 8);
     }
     return strtol(s, NULL, 10) * sign;
 }
 
-long int strtol (const wchar_t *s, wchar_t **__endptr, int __base)
+int64_t strtol (const wchar_t *s, wchar_t **__endptr, int __base)
 {
-    long int v=0, sign = 1;
+    int64_t v=0, sign = 1;
     if(!s || !*s) return 0;
-    if(*s == '-') { sign = -1; s++; }
-    while(*s < L'0' || (__base < 10 && *s >= __base + L'0') || (__base > 10 && ((*s > L'9' && *s < L'A') ||
-            (*s > L'F' && *s < L'a') || *s > L'f'))) {
+    if(*s == L'-') { sign = -1; s++; }
+    while(!(*s < L'0' || (__base < 10 && *s >= __base + L'0') || (__base >= 10 && ((*s > L'9' && *s < L'A') ||
+            (*s > L'F' && *s < L'a') || *s > L'f')))) {
         v *= __base;
-        if(*s >= L'0' && *s < (__base < 10 ? __base + L'0' : L'9'))
+        if(*s >= L'0' && *s <= (__base < 10 ? __base + L'0' : L'9'))
             v += (*s)-L'0';
         else if(__base == 16 && *s >= L'a' && *s <= L'f')
             v += (*s)-L'a'+10;
@@ -72,7 +74,7 @@ long int strtol (const wchar_t *s, wchar_t **__endptr, int __base)
 void *malloc (size_t __size)
 {
     void *ret = NULL;
-    efi_status_t status = uefi_call_wrapper(BS->AllocatePool, 3, LIP ? LIP->ImageDataType : EfiLoaderData, __size, &ret);
+    efi_status_t status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, __size, &ret);
     if(!EFI_ERROR(status) || !ret) errno = ENOMEM;
     return ret;
 }
@@ -80,7 +82,7 @@ void *malloc (size_t __size)
 void *calloc (size_t __nmemb, size_t __size)
 {
     void *ret = malloc(__nmemb * __size);
-    if(ret) __builtin_memset(ret, 0, __nmemb * __size);
+    if(ret) memset(ret, 0, __nmemb * __size);
     return ret;
 }
 
@@ -89,13 +91,13 @@ void *realloc (void *__ptr, size_t __size)
 #if 1
     void *ret = __ptr;
     /* not sure if this works */
-    efi_status_t status = uefi_call_wrapper(BS->AllocatePool, 3, LIP ? LIP->ImageDataType : EfiLoaderData, __size, &ret);
+    efi_status_t status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, __size, &ret);
     if(!EFI_ERROR(status) || !ret) errno = ENOMEM;
     return ret;
 #else
     void *ret = malloc(__size);
     /* this isn't perfect, because we don't know the original size... */
-    if(ret && __ptr) __builtin_memcpy(ret, __ptr, __size);
+    if(ret && __ptr) memcpy(ret, __ptr, __size);
     if(__ptr) free(__ptr);
     return ret;
 #endif
@@ -103,18 +105,33 @@ void *realloc (void *__ptr, size_t __size)
 
 void free (void *__ptr)
 {
-    efi_status_t status = uefi_call_wrapper(BS->FreePool, 1, __ptr);
+    efi_status_t status = BS->FreePool(__ptr);
     if(!EFI_ERROR(status)) errno = ENOMEM;
 }
 
 void abort ()
 {
-    uefi_call_wrapper(BS->Exit, 4, IM, EFI_ABORTED, 0, NULL);
+    BS->Exit(IM, EFI_ABORTED, 0, NULL);
 }
 
 void exit (int __status)
 {
-    uefi_call_wrapper(BS->Exit, 4, IM, !__status ? 0 : (__status < 0 ? EFIERR(-__status) : EFIERR(__status)), 0, NULL);
+    BS->Exit(IM, !__status ? 0 : (__status < 0 ? EFIERR(-__status) : EFIERR(__status)), 0, NULL);
+}
+
+int exit_bs()
+{
+    efi_status_t status;
+    efi_memory_descriptor_t *memory_map = NULL;
+    uintn_t cnt = 3, memory_map_size=0, map_key=0, desc_size=0;
+
+    while(cnt--) {
+        status = BS->GetMemoryMap(&memory_map_size, memory_map, &map_key, &desc_size, NULL);
+        if (status!=EFI_BUFFER_TOO_SMALL) break;
+        status = BS->ExitBootServices(IM, map_key);
+        if(!EFI_ERROR(status)) return 0;
+    }
+    return (int)(status & 0xffff);
 }
 
 void *bsearch(const void *key, const void *base, size_t nmemb, size_t size, __compar_fn_t cmp)
@@ -174,7 +191,7 @@ int wctomb (char *s, wchar_t u)
         *(s+0)=((u>>6)&0x1F)|0xC0;
         *(s+1)=(u&0x3F)|0x80;
         ret = 2;
-    } else if(u<0x10000) {
+    } else {
         *(s+0)=((u>>12)&0x0F)|0xE0;
         *(s+1)=((u>>6)&0x3F)|0x80;
         *(s+2)=(u&0x3F)|0x80;
@@ -211,4 +228,3 @@ size_t wcstombs (char *__s, const wchar_t *__pwcs, size_t __n)
     };
     return __s - orig;
 }
-

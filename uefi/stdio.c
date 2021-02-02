@@ -32,16 +32,27 @@
 
 static efi_file_handle_t *__root_dir = NULL;
 
+void __stdio_seterrno(efi_status_t status)
+{
+    switch((int)(status & 0xffff)) {
+        case EFI_WRITE_PROTECTED & 0xffff: errno = EROFS; break;
+        case EFI_ACCESS_DENIED & 0xffff: errno = EACCES; break;
+        case EFI_VOLUME_FULL & 0xffff: errno = ENOSPC; break;
+        case EFI_NOT_FOUND & 0xffff: errno = ENOENT; break;
+        default: errno = EIO; break;
+    }
+}
+
 int fclose (FILE *__stream)
 {
-    efi_status_t status = uefi_call_wrapper(__stream->Close, 1, __stream);
+    efi_status_t status = __stream->Close(__stream);
     free(__stream);
     return !EFI_ERROR(status);
 }
 
 int fflush (FILE *__stream)
 {
-    efi_status_t status = uefi_call_wrapper(__stream->Flush, 1, __stream);
+    efi_status_t status = __stream->Flush(__stream);
     return !EFI_ERROR(status);
 }
 
@@ -52,9 +63,9 @@ FILE *fopen (const wchar_t *__filename, const char *__modes)
     efi_guid_t sfsGuid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
     efi_simple_file_system_protocol_t *sfs = NULL;
     if(!__root_dir && LIP) {
-        status = uefi_call_wrapper(BS->HandleProtocol, 3, LIP->DeviceHandle, &sfsGuid, &sfs);
+        status = BS->HandleProtocol(LIP->DeviceHandle, &sfsGuid, (void **)&sfs);
         if(!EFI_ERROR(status))
-            status = uefi_call_wrapper(sfs->OpenVolume, 2, sfs, &__root_dir);
+            status = sfs->OpenVolume(sfs, &__root_dir);
     }
     if(!__root_dir) {
         errno = ENODEV;
@@ -63,16 +74,10 @@ FILE *fopen (const wchar_t *__filename, const char *__modes)
     errno = 0;
     ret = (FILE*)malloc(sizeof(FILE));
     if(!ret) return NULL;
-    status = uefi_call_wrapper(__root_dir->Open, 5, __root_dir, ret, __filename,
+    status = __root_dir->Open(__root_dir, &ret, (wchar_t*)__filename,
         __modes[0] == L'r' ? EFI_FILE_MODE_READ : (EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE), 0);
     if(EFI_ERROR(status)) {
-        switch((int)(status & 0xffff)) {
-            case EFI_WRITE_PROTECTED & 0xffff: errno = EROFS; break;
-            case EFI_ACCESS_DENIED & 0xffff: errno = EACCES; break;
-            case EFI_VOLUME_FULL & 0xffff: errno = ENOSPC; break;
-            case EFI_NOT_FOUND & 0xffff: errno = ENOENT; break;
-            default: errno = EIO; break;
-        }
+        __stdio_seterrno(status);
         free(ret); ret = NULL;
     }
     if(__modes[0] == L'a') fseek(ret, 0, SEEK_END);
@@ -82,7 +87,7 @@ FILE *fopen (const wchar_t *__filename, const char *__modes)
 size_t fread (void *__ptr, size_t __size, size_t __n, FILE *__stream)
 {
     uintn_t bs = __size * __n;
-    efi_status_t status = uefi_call_wrapper(__stream->Read, 3, __stream, &bs, __ptr);
+    efi_status_t status = __stream->Read(__stream, &bs, __ptr);
     if(status == EFI_END_OF_FILE) bs = 0;
     return bs / __size;
 }
@@ -90,7 +95,7 @@ size_t fread (void *__ptr, size_t __size, size_t __n, FILE *__stream)
 size_t fwrite (const void *__ptr, size_t __size, size_t __n, FILE *__stream)
 {
     uintn_t bs = __size * __n;
-    efi_status_t status = uefi_call_wrapper(__stream->Write, 3, __stream, &bs, __ptr);
+    efi_status_t status = __stream->Write(__stream, &bs, (void *)__ptr);
     return bs / __size;
 }
 
@@ -103,21 +108,21 @@ int fseek (FILE *__stream, long int __off, int __whence)
     uintn_t infosiz = sizeof(efi_file_info_t) + 16;
     switch(__whence) {
         case SEEK_END:
-            status = uefi_call_wrapper(__stream->GetInfo, 4, __stream, &infoGuid, &infosiz, info);
+            status = __stream->GetInfo(__stream, &infoGuid, &infosiz, info);
             if(!EFI_ERROR(status)) {
                 off = info->FileSize + __off;
-                status = uefi_call_wrapper(__stream->SetPosition, 2, __stream, &off);
+                status = __stream->SetPosition(__stream, off);
             }
             break;
         case SEEK_CUR:
-            status = uefi_call_wrapper(__stream->GetPosition, 2, __stream, &off);
+            status = __stream->GetPosition(__stream, &off);
             if(!EFI_ERROR(status)) {
                 off += __off;
-                status = uefi_call_wrapper(__stream->SetPosition, 2, __stream, &off);
+                status = __stream->SetPosition(__stream, off);
             }
             break;
         default:
-            status = uefi_call_wrapper(__stream->SetPosition, 2, __stream, &off);
+            status = __stream->SetPosition(__stream, off);
             break;
     }
     return EFI_ERROR(status) ? -1 : 0;
@@ -126,7 +131,7 @@ int fseek (FILE *__stream, long int __off, int __whence)
 long int ftell (FILE *__stream)
 {
     uint64_t off = 0;
-    efi_status_t status = uefi_call_wrapper(__stream->GetPosition, 2, __stream, &off);
+    efi_status_t status = __stream->GetPosition(__stream, &off);
     return EFI_ERROR(status) ? -1 : (long int)off;
 }
 
@@ -134,16 +139,18 @@ int vsnprintf(wchar_t *dst, size_t maxlen, const wchar_t *fmt, __builtin_va_list
 {
 #define needsescape(a) (a==L'\"' || a==L'\\' || a==L'\a' || a==L'\b' || a==L'\033' || a=='\f' || \
     a==L'\r' || a==L'\n' || a==L'\t' || a=='\v')
-    long int arg;
-    int len, sign, i;
-    wchar_t *p, *orig=dst, tmpstr[19], pad=' ';
+    efi_physical_address_t m;
+    uint8_t *mem;
+    int64_t arg;
+    int len, sign, i, j;
+    wchar_t *p, *orig=dst, *end = dst + maxlen - 1, tmpstr[19], pad=' ', n;
     char *c;
 
     if(dst==NULL || fmt==NULL)
         return 0;
 
     arg = 0;
-    while(*fmt && (dst - orig) + 1 < maxlen) {
+    while(*fmt && dst < end) {
         if(*fmt==L'%') {
             fmt++;
             if(*fmt==L'%') goto put;
@@ -211,7 +218,7 @@ int vsnprintf(wchar_t *dst, size_t maxlen, const wchar_t *fmt, __builtin_va_list
 hex:            i=16;
                 tmpstr[i]=0;
                 do {
-                    wchar_t n=arg & 0xf;
+                    n=arg & 0xf;
                     /* 0-9 => '0'-'9', 10-15 => 'A'-'F' */
                     tmpstr[--i]=n+(n>9?(*fmt==L'X'?0x37:0x57):0x30);
                     arg>>=4;
@@ -230,7 +237,7 @@ hex:            i=16;
 copystring:     if(p==NULL) {
                     p=L"(null)";
                 }
-                while(*p && (dst - orig) + 2 < maxlen) {
+                while(*p && dst + 2 < end) {
                     if(*fmt==L'q' && needsescape(*p)) {
                         *dst++ = L'\\';
                         switch(*p) {
@@ -251,7 +258,7 @@ copystring:     if(p==NULL) {
             if(*fmt==L'S' || *fmt==L'Q') {
                 c = __builtin_va_arg(args, char*);
                 if(c==NULL) goto copystring;
-                while(*p && (dst - orig) + 2 < maxlen) {
+                while(*p && dst + 2 < end) {
                     arg = *c;
                     if((*c & 128) != 0) {
                         if((*c & 32) == 0 ) {
@@ -282,16 +289,44 @@ copystring:     if(p==NULL) {
                             case L'\v': *dst++ = L'v'; break;
                             default: *dst++ = arg; break;
                         }
-                    } else
+                    } else {
+                        if(arg == L'\n') *dst++ = L'\r';
                         *dst++ = (wchar_t)(arg & 0xffff);
+                    }
+                }
+            } else
+            if(*fmt==L'D') {
+                m = __builtin_va_arg(args, efi_physical_address_t);
+                for(j = 0; j < (len < 1 ? 1 : (len > 16 ? 16 : len)); j++) {
+                    for(i = 44; i >= 0; i -= 4) {
+                        n = (m >> i) & 15; *dst++ = n + (n>9?0x37:0x30);
+                        if(dst >= end) goto zro;
+                    }
+                    *dst++ = L':'; if(dst >= end) goto zro;
+                    *dst++ = L' '; if(dst >= end) goto zro;
+                    mem = (uint8_t*)m;
+                    for(i = 0; i < 16; i++) {
+                        n = (mem[i] >> 4) & 15; *dst++ = n + (n>9?0x37:0x30); if(dst >= end) goto zro;
+                        n = mem[i] & 15; *dst++ = n + (n>9?0x37:0x30); if(dst >= end) goto zro;
+                        *dst++ = L' ';if(dst >= end) goto zro;
+                    }
+                    *dst++ = L' '; if(dst >= end) goto zro;
+                    for(i = 0; i < 16; i++) {
+                        *dst++ = (mem[i] < 32 || mem[i] >= 127 ? L'.' : mem[i]);
+                        if(dst >= end) goto zro;
+                    }
+                    *dst++ = L'\r'; if(dst >= end) goto zro;
+                    *dst++ = L'\n'; if(dst >= end) goto zro;
+                    m += 16;
                 }
             }
         } else {
-put:        *dst++ = *fmt;
+put:        if(*fmt == L'\n') *dst++ = L'\r';
+            *dst++ = *fmt;
         }
         fmt++;
     }
-    *dst=0;
+zro:*dst=0;
     return dst-orig;
 #undef needsescape
 }
@@ -320,7 +355,7 @@ int vprintf(const wchar_t* fmt, __builtin_va_list args)
     wchar_t dst[BUFSIZ];
     int ret;
     ret = vsnprintf(dst, sizeof(dst), fmt, args);
-    uefi_call_wrapper(ST->ConOut->OutputString, 2, ST->ConOut, &dst);
+    ST->ConOut->OutputString(ST->ConOut, (wchar_t *)&dst);
     return ret;
 }
 
@@ -334,16 +369,16 @@ int printf(const wchar_t* fmt, ...)
 int vfprintf (FILE *__stream, const wchar_t *__format, __builtin_va_list args)
 {
     wchar_t dst[BUFSIZ];
-    int ret;
+    uintn_t ret;
     if(__stream == stdin) return 0;
     ret = vsnprintf(dst, sizeof(dst), __format, args);
     if(ret < 1) return 0;
     if(__stream == stdout)
-        uefi_call_wrapper(ST->ConOut->OutputString, 2, ST->ConOut, &dst);
+        ST->ConOut->OutputString(ST->ConOut, (wchar_t*)&dst);
     else if(__stream == stderr)
-        uefi_call_wrapper(ST->StdErr->OutputString, 2, ST->StdErr, &dst);
+        ST->StdErr->OutputString(ST->StdErr, (wchar_t*)&dst);
     else
-        uefi_call_wrapper(__stream->Write, 3, __stream, &ret, &dst);
+        __stream->Write(__stream, &ret, (wchar_t*)&dst);
     return ret;
 }
 
@@ -357,7 +392,7 @@ int fprintf (FILE *__stream, const wchar_t *__format, ...)
 int getchar (void)
 {
     efi_input_key_t key;
-    efi_status_t status = uefi_call_wrapper(ST->ConIn, 2, ST->ConIn, &key);
+    efi_status_t status = ST->ConIn->ReadKeyStroke(ST->ConIn, &key);
     return EFI_ERROR(status) ? -1 : key.UnicodeChar;
 
 }
@@ -365,9 +400,9 @@ int getchar (void)
 int getchar_ifany (void)
 {
     efi_input_key_t key;
-    efi_status_t status = uefi_call_wrapper(BS->CheckEvent, 1, ST->ConIn->WaitForKey);
+    efi_status_t status = BS->CheckEvent(ST->ConIn->WaitForKey);
     if(!status) {
-        status = uefi_call_wrapper(ST->ConIn, 2, ST->ConIn, &key);
+        status = ST->ConIn->ReadKeyStroke(ST->ConIn, &key);
         return EFI_ERROR(status) ? -1 : key.UnicodeChar;
     }
     return 0;
@@ -378,23 +413,6 @@ int putchar (int __c)
     wchar_t tmp[2];
     tmp[0] = (wchar_t)__c;
     tmp[1] = 0;
-    uefi_call_wrapper(ST->ConOut->OutputString, 2, ST->ConOut, &tmp);
+    ST->ConOut->OutputString(ST->ConOut, (__c == L'\n' ? (wchar_t*)L"\r\n" : (wchar_t*)&tmp));
     return (int)tmp[0];
-}
-
-/* this isn't POSIX, but also uses sprintf */
-void uefi_dumpmem(efi_physical_address_t address)
-{
-    uint8_t *mem = (uint8_t*)(address & ~0xF);
-    int i, j;
-    wchar_t tmp[128], *t;
-    for(j = 0; j < 8; j++) {
-        t = tmp + sprintf(tmp, L"%p: ");
-        for(i = 0; i < 16; i++)
-            t += sprintf(t, L"%02x %s", mem[i], i % 4 == 3 ? L" " : L"");
-        for(i = 0; i < 16; i++)
-            t += sprintf(t, L" %c", mem[i] < 32 || mem[i] >= 127 ? L'.' : mem[i]);
-        uefi_call_wrapper(ST->StdErr->OutputString, 2, ST->StdErr, &tmp);
-        mem += 16;
-    }
 }

@@ -32,12 +32,12 @@
 
 int usleep (unsigned long int __useconds)
 {
-    uefi_call_wrapper(BS->Stall, 1, __useconds);
+    BS->Stall(__useconds);
     return 0;
 }
 
 unsigned int sleep (unsigned int __seconds)
 {
-    uefi_call_wrapper(BS->Stall, 1, __seconds * 1000000);
+    BS->Stall((unsigned long int)__seconds * 1000000UL);
     return 0;
 }

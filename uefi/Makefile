@@ -5,16 +5,18 @@ endif
 SRCS ?= $(wildcard *.c) $(wildcard *.S)
 TMP = $(SRCS:.c=.o)
 OBJS = $(TMP:.S=.o)
-CFLAGS += -mno-red-zone -fpic -fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check \
-  -D__$(ARCH)__ -I/usr/include -I. -I./uefi -I/usr/include/efi -I/usr/include/efi/$(ARCH) -I/usr/include/efi/protocol
-LDFLAGS += -nostdlib -shared -Bsymbolic
+CFLAGS += -mno-red-zone -fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check \
+  -D__$(ARCH)__ -DHAVE_USE_MS_ABI \
+  -I/usr/include -I. -I./uefi -I/usr/include/efi -I/usr/include/efi/$(ARCH) -I/usr/include/efi/protocol
 
 LIBSRCS = $(filter-out crt_$(ARCH).c,$(wildcard *.c)) $(wildcard *.S)
 TMP = $(LIBSRCS:.c=.o)
 LIBOBJS = $(TMP:.S=.o)
 
 ifeq ($(USE_LLVM),)
-CFLAGS += -Wno-builtin-declaration-mismatch
+CFLAGS += -Wno-builtin-declaration-mismatch -fpic -maccumulate-outgoing-args
+LDFLAGS += -nostdlib -shared -Bsymbolic -Luefi uefi/crt_$(ARCH).o
+LIBS += -o $(TARGET).so -luefi -T uefi/elf_$(ARCH)_efi.lds
 # see if we're cross-compiling
 ifeq ($(ARCH),$(MYARCH))
 CC = $(ARCH)-elf-gcc
@@ -23,15 +25,16 @@ else
 CC = gcc
 LD = ld
 endif
-else
-CFLAGS += --target=$(ARCH)-elf -Wno-builtin-requires-header -Wno-incompatible-library-redeclaration
-LDFLAGS += -m elf_$(ARCH)
-CC = clang
-LD = ld.lld
-endif
-# you will need this from GNU binutils, llvm-objcopy won't cut it
 OBJCOPY ?= objcopy
 AR ?= ar
+else
+CFLAGS += --target=$(ARCH)-pc-win32-coff -Wno-builtin-requires-header -Wno-incompatible-library-redeclaration
+LDFLAGS += -subsystem:efi_application -nodefaultlib -dll -entry:uefi_init uefi/*.o
+LIBS = -out:$(TARGET)
+CC = clang
+LD = lld-link
+OBJCOPY = true
+endif
 
 ifeq ($(wildcard uefi/Makefile),)
 ALLTARGETS = crt_$(ARCH).o libuefi.a build
@@ -42,18 +45,27 @@ endif
 all: $(ALLTARGETS)
 
 uefi/libuefi.a:
-	@make --no-print-directory -C uefi libuefi.a
+	make --no-print-directory -C uefi libuefi.a USE_LLVM=$(USE_LLVM)
+
+libuefi.lib: $(LIBOBJS)
 
 libuefi.a: $(LIBOBJS)
+ifeq ($(USE_LLVM),)
 	@rm $@ 2>/dev/null || true
 	$(AR) -frsv $@ $(LIBOBJS) >/dev/null
+else
+	true
+endif
 
 $(TARGET): $(TARGET).so
+ifeq ($(USE_LLVM),)
 	@$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .rel.* -j .rela.* -j .reloc --target efi-app-$(ARCH) --subsystem=10 $^ $@
 	@rm $(TARGET).so
+endif
 
-$(TARGET).so: uefi/crt_$(ARCH).o $(OBJS)
-	$(LD) $(LDFLAGS) -Luefi $^ -o $@ $(LIBS) -luefi -T uefi/elf_$(ARCH)_efi.lds
+$(TARGET).so: $(OBJS)
+	$(LD) $(LDFLAGS) $^ $(LIBS)
+	@rm *.lib 2>/dev/null || true
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@
@@ -68,7 +80,7 @@ build:
 	@cp libuefi.a uefi.h ../build/uefi
 
 clean:
-	@rm $(TARGET) *.o *.a $(LIBOBJS) 2>/dev/null || true
+	@rm $(TARGET) *.o *.a *.lib $(LIBOBJS) 2>/dev/null || true
 
 distclean: clean
 ifeq ($(wildcard uefi/Makefile),)

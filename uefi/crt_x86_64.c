@@ -29,10 +29,34 @@
  */
 
 #include <uefi.h>
-#include <uefielf.h>
 
 /* this is implemented by the application */
 extern int main(int argc, wchar_t **argv);
+
+/* definitions for elf relocations */
+typedef uint64_t Elf64_Xword;
+typedef	int64_t  Elf64_Sxword;
+typedef uint64_t Elf64_Addr;
+typedef struct
+{
+  Elf64_Sxword  d_tag;              /* Dynamic entry type */
+  union
+    {
+      Elf64_Xword d_val;            /* Integer value */
+      Elf64_Addr d_ptr;             /* Address value */
+    } d_un;
+} Elf64_Dyn;
+#define DT_NULL             0       /* Marks end of dynamic section */
+#define DT_RELA             7       /* Address of Rela relocs */
+#define DT_RELASZ           8       /* Total size of Rela relocs */
+#define DT_RELAENT          9       /* Size of one Rela reloc */
+typedef struct
+{
+  Elf64_Addr    r_offset;           /* Address */
+  Elf64_Xword   r_info;             /* Relocation type and symbol index */
+} Elf64_Rel;
+#define ELF64_R_TYPE(i)     ((i) & 0xffffffff)
+#define R_X86_64_RELATIVE   8       /* Adjust by program base */
 
 /* globals to store system table pointers */
 efi_handle_t IM = NULL;
@@ -47,6 +71,7 @@ void bootstrap()
     __asm__ __volatile__ (
     /* call init in C */
     "	.align 4;"
+#ifndef __clang__
     "	.globl _start;"
     "_start:"
     "	lea ImageBase(%rip), %rdi;"
@@ -54,7 +79,20 @@ void bootstrap()
     "	call uefi_init;"
     "	ret;"
 
-    /*** the following code snipplets are borrowed from gnu-efi ***/
+    /* fake a relocation record, so that EFI won't complain */
+    " 	.data;"
+    "dummy:	.long	0;"
+    " 	.section .reloc, \"a\";"
+    "label1:;"
+    "	.long	dummy-label1;"
+    " 	.long	10;"
+    "    .word 0;"
+    ".text;"
+#else
+    "	.globl __chkstk;"
+    "__chkstk:"
+    "	ret;"
+#endif
     /* setjmp and longjmp */
     "	.globl	setjmp;"
     "setjmp:"
@@ -85,152 +123,32 @@ void bootstrap()
     "	cmp	%rax,%rdx;"
     "	cmove	%rcx,%rax;"
     "	jmp	*0x38(%rdi);"
-    /* for uefi_call_wrapper */
-    "	.globl	uefi_call0;"
-    "uefi_call0:"
-    "	subq $40, %rsp;"
-    "	call *%rdi;"
-    "	addq $40, %rsp;"
-    "	ret;"
-    "	.globl	uefi_call1;"
-    "uefi_call1:"
-    "	subq $40, %rsp;"
-    "	mov  %rsi, %rcx;"
-    "	call *%rdi;"
-    "	addq $40, %rsp;"
-    "	ret;"
-    "	.globl	uefi_call2;"
-    "uefi_call2:"
-    "	subq $40, %rsp;"
-    "	mov  %rsi, %rcx;"
-    "	call *%rdi;"
-    "	addq $40, %rsp;"
-    "	ret;"
-    "	.globl	uefi_call3;"
-    "uefi_call3:"
-    "	subq $40, %rsp;"
-    "	mov  %rcx, %r8;"
-    "	mov  %rsi, %rcx;"
-    "	call *%rdi;"
-    "	addq $40, %rsp;"
-    "	ret;"
-    "	.globl	uefi_call4;"
-    "uefi_call4:"
-    "	subq $40, %rsp;"
-    "	mov %r8, %r9;"
-    "	mov %rcx, %r8;"
-    "	mov %rsi, %rcx;"
-    "	call *%rdi;"
-    "	addq $40, %rsp;"
-    "	ret;"
-    "	.globl	uefi_call5;"
-    "uefi_call5:"
-    "	subq $40, %rsp;"
-    "	mov %r9, 32(%rsp);"
-    "	mov %r8, %r9;"
-    "	mov %rcx, %r8;"
-    "	mov %rsi, %rcx;"
-    "	call *%rdi;"
-    "	addq $40, %rsp;"
-    "	ret;"
-    "	.globl	uefi_call6;"
-    "uefi_call6:"
-    "	subq $56, %rsp;"
-    "	mov 56+8(%rsp), %rax;"
-    "	mov %rax, 40(%rsp);"
-    "	mov %r9, 32(%rsp);"
-    "	mov %r8, %r9;"
-    "	mov %rcx, %r8;"
-    "	mov %rsi, %rcx;"
-    "	call *%rdi;"
-    "	addq $56, %rsp;"
-    "	ret;"
-    "	.globl	uefi_call7;"
-    "uefi_call7:"
-    "	subq $56, %rsp;"
-    "	mov 56+16(%rsp), %rax;"
-    "	mov %rax, 48(%rsp);"
-    "	mov 56+8(%rsp), %rax;"
-    "	mov %rax, 40(%rsp);"
-    "	mov %r9, 32(%rsp);"
-    "	mov %r8, %r9;"
-    "	mov %rcx, %r8;"
-    "	mov %rsi, %rcx;"
-    "	call *%rdi;"
-    "	addq $56, %rsp;"
-    "	ret;"
-    "	.globl	uefi_call8;"
-    "uefi_call8:"
-    "	subq $72, %rsp;"
-    "	mov 72+24(%rsp), %rax;"
-    "	mov %rax, 56(%rsp);"
-    "	mov 72+16(%rsp), %rax;"
-    "	mov %rax, 48(%rsp);"
-    "	mov 72+8(%rsp), %rax;"
-    "	mov %rax, 40(%rsp);"
-    "	mov %r9, 32(%rsp);"
-    "	mov %r8, %r9;"
-    "	mov %rcx, %r8;"
-    "	mov %rsi, %rcx;"
-    "	call *%rdi;"
-    "	addq $72, %rsp;"
-    "	ret;"
-    "	.globl	uefi_call9;"
-    "uefi_call9:"
-    "	subq $72, %rsp;"
-    "	mov 72+32(%rsp), %rax;"
-    "	mov %rax, 64(%rsp);"
-    "	mov 72+24(%rsp), %rax;"
-    "	mov %rax, 56(%rsp);"
-    "	mov 72+16(%rsp), %rax;"
-    "	mov %rax, 48(%rsp);"
-    "	mov 72+8(%rsp), %rax;"
-    "	mov %rax, 40(%rsp);"
-    "	mov %r9, 32(%rsp);"
-    "	mov %r8, %r9;"
-    "	mov %rcx, %r8;"
-    "	mov %rsi, %rcx;"
-    "	call *%rdi;"
-    "	addq $72, %rsp;"
-    "	ret;"
-    "	.globl	uefi_call10;"
-    "uefi_call10:"
-    "	subq $88, %rsp;"
-    "	mov 88+40(%rsp), %rax;"
-    "	mov %rax, 72(%rsp);"
-    "	mov 88+32(%rsp), %rax;"
-    "	mov %rax, 64(%rsp);"
-    "	mov 88+24(%rsp), %rax;"
-    "	mov %rax, 56(%rsp);"
-    "	mov 88+16(%rsp), %rax;"
-    "	mov %rax, 48(%rsp);"
-    "	mov 88+8(%rsp), %rax;"
-    "	mov %rax, 40(%rsp);"
-    "	mov %r9, 32(%rsp);"
-    "	mov %r8, %r9;"
-    "	mov %rcx, %r8;"
-    "	mov %rsi, %rcx;"
-    "	call *%rdi;"
-    "	addq $88, %rsp;"
-    "	ret;"
     );
 }
 
 /**
- * Initialize POSIX-UEFI and call teh application's main() function
+ * Initialize POSIX-UEFI and call the application's main() function
  */
-int uefi_init (efi_handle_t image, efi_system_table_t *systab, uintptr_t ldbase, Elf64_Dyn *dyn) {
-    long relsz = 0, relent = 0;
-    Elf64_Rel *rel = 0;
-    uintptr_t *addr;
+int uefi_init (
+#ifndef __clang__
+    uintptr_t ldbase, Elf64_Dyn *dyn, efi_system_table_t *systab, efi_handle_t image
+#else
+    efi_handle_t image, efi_system_table_t *systab
+#endif
+) {
     efi_guid_t shpGuid = EFI_SHELL_PARAMETERS_PROTOCOL_GUID;
     efi_shell_parameters_protocol_t *shp = NULL;
     efi_guid_t shiGuid = SHELL_INTERFACE_PROTOCOL_GUID;
     efi_shell_interface_protocol_t *shi = NULL;
     efi_guid_t lipGuid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
     efi_status_t status;
-    int i, argc = 0;
+    int argc = 0;
     wchar_t **argv = NULL;
+#ifndef __clang__
+    int i;
+    long relsz = 0, relent = 0;
+    Elf64_Rel *rel = 0;
+    uintptr_t *addr;
     /* handle relocations */
     for (i = 0; dyn[i].d_tag != DT_NULL; ++i) {
         switch (dyn[i].d_tag) {
@@ -248,39 +166,21 @@ int uefi_init (efi_handle_t image, efi_system_table_t *systab, uintptr_t ldbase,
             relsz -= relent;
         }
     }
+#endif
     /* save EFI pointers and loaded image into globals */
     IM = image;
     ST = systab;
     BS = systab->BootServices;
     RT = systab->RuntimeServices;
-    uefi_call_wrapper(BS->HandleProtocol, 3, image, &lipGuid, (void **) &LIP);
+    BS->HandleProtocol(image, &lipGuid, (void **)&LIP);
     /* get command line arguments */
-    status = uefi_call_wrapper(BS->OpenProtocol, 6, image, &shpGuid, &shp, image, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
+    status = BS->OpenProtocol(image, &shpGuid, (void **)&shp, image, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
     if(!EFI_ERROR(status) && shp) { argc = shp->Argc; argv = shp->Argv; }
     else {
         /* if shell 2.0 failed, fallback to shell 1.0 interface */
-        status = uefi_call_wrapper(BS->OpenProtocol, 6, image, &shiGuid, &shi, image, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
+        status = BS->OpenProtocol(image, &shiGuid, (void **)&shi, image, NULL, EFI_OPEN_PROTOCOL_GET_PROTOCOL);
         if(!EFI_ERROR(status) && shi) { argc = shi->Argc; argv = shi->Argv; }
     }
-
     /* call main */
     return main(argc, argv);
-}
-
-/**
- * Exit Boot Services
- */
-boolean_t uefi_exit_bs()
-{
-    efi_status_t status;
-    efi_memory_descriptor_t *memory_map = NULL;
-    uintn_t cnt = 3, memory_map_size=0, map_key=0, desc_size=0;
-
-    while(cnt--) {
-        status = uefi_call_wrapper(BS->GetMemoryMap, 5, &memory_map_size, memory_map, &map_key, &desc_size, NULL);
-        if (status!=EFI_BUFFER_TOO_SMALL) break;
-        status = uefi_call_wrapper(BS->ExitBootServices, 2, IM, map_key);
-        if(!EFI_ERROR(status)) return 1;
-    }
-    return 0;
 }

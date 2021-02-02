@@ -28,42 +28,6 @@
  *
  */
 
-/*
- * Some parts (like the uefi_call_wrapper) are borrowed from gnu-efi (https://sourceforge.net/projects/gnu-efi)
- * which are created by the following author and licensed under the following terms (from README.gnuefi and
- * README.efilib, because there's no LICENSE file in gnu-efi's repo):
- *
- * David Mosberger <davidm@hpl.hp.com>
- * 23 September 1999
- * Copyright (c) 1999-2007 Hewlett-Packard Co.
- * Copyright (c) 2006-2010 Intel Co.
- *
- * Copyright (c) 1998-2000 Intel Corporation
- *
- * Redistribution and use in source and binary forms, with or without modification, are permitted
- * provided that the following conditions are met:
- *
- * Redistributions of source code must retain the above copyright notice, this list of conditions and
- * the following disclaimer.
- *
- * Redistributions in binary form must reproduce the above copyright notice, this list of conditions
- * and the following disclaimer in the documentation and/or other materials provided with the
- * distribution.
- *
- * THIS SOFTWARE IS PROVIDED ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES,
- * INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND
- * FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL INTEL BE
- * LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE. THE EFI SPECIFICATION AND ALL OTHER INFORMATION
- * ON THIS WEB SITE ARE PROVIDED "AS IS" WITH NO WARRANTIES, AND ARE SUBJECT
- * TO CHANGE WITHOUT NOTICE.
- */
-
 #ifndef _UEFI_H_
 #define _UEFI_H_
 
@@ -72,7 +36,21 @@ extern "C" {
 #endif
 
 /* get these from the compiler */
-#include <stdint.h>
+typedef char                int8_t;
+typedef unsigned char       uint8_t;
+typedef short               int16_t;
+typedef unsigned short      uint16_t;
+typedef int                 int32_t;
+typedef unsigned int        uint32_t;
+#ifndef __clang__
+typedef long int            int64_t;
+typedef unsigned long int   uint64_t;
+typedef unsigned long int   uintptr_t;
+#else
+typedef long long           int64_t;
+typedef unsigned long long  uint64_t;
+typedef unsigned long long  uintptr_t;
+#endif
 
 #ifndef NULL
 #define NULL ((void*)0)
@@ -83,6 +61,7 @@ typedef uint8_t  boolean_t;
 typedef uint16_t wchar_t;
 typedef uint64_t uintn_t;
 typedef uint64_t size_t;
+typedef uint64_t time_t;
 typedef uint64_t efi_status_t;
 typedef uint64_t efi_tpl_t;
 typedef uint64_t efi_lba_t;
@@ -90,77 +69,6 @@ typedef uint64_t efi_physical_address_t;
 typedef uint64_t efi_virtual_address_t;
 typedef void     *efi_handle_t;
 typedef void     *efi_event_t;
-
-/* exit Boot Services function. Returns true on success. */
-boolean_t uefi_exit_bs();
-/* dump memory to stderr */
-void uefi_dumpmem(efi_physical_address_t address);
-
-/* Prototypes of EFI cdecl -> stdcall trampolines */
-uint64_t uefi_call0(void *func);
-uint64_t uefi_call1(void *func, uint64_t arg1);
-uint64_t uefi_call2(void *func, uint64_t arg1, uint64_t arg2);
-uint64_t uefi_call3(void *func, uint64_t arg1, uint64_t arg2, uint64_t arg3);
-uint64_t uefi_call4(void *func, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4);
-uint64_t uefi_call5(void *func, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5);
-uint64_t uefi_call6(void *func, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6);
-uint64_t uefi_call7(void *func, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6,
-    uint64_t arg7);
-uint64_t uefi_call8(void *func, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6,
-    uint64_t arg7, uint64_t arg8);
-uint64_t uefi_call9(void *func, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6,
-    uint64_t arg7, uint64_t arg8, uint64_t arg9);
-uint64_t uefi_call10(void *func, uint64_t arg1, uint64_t arg2, uint64_t arg3, uint64_t arg4, uint64_t arg5, uint64_t arg6,
-    uint64_t arg7, uint64_t arg8, uint64_t arg9, uint64_t arg10);
-
-#ifndef uefi_call_wrapper
-/*
-  Credits for macro-magic:
-    https://groups.google.com/forum/?fromgroups#!topic/comp.std.c/d-6Mj5Lko_s
-    http://efesx.com/2010/08/31/overloading-macros/
-*/
-#define __VA_NARG__(...) __VA_NARG_(_0, ## __VA_ARGS__, __RSEQ_N())
-#define __VA_NARG_(...) __VA_ARG_N(__VA_ARGS__)
-#define __VA_ARG_N(_0,_1,_2,_3,_4,_5,_6,_7,_8,_9,_10,N,...) N
-#define __RSEQ_N() 10, 9, 8, 7, 6, 5, 4, 3, 2, 1,  0
-#define __VA_ARG_NSUFFIX__(prefix,...) __VA_ARG_NSUFFIX_N(prefix, __VA_NARG__(__VA_ARGS__))
-#define __VA_ARG_NSUFFIX_N(prefix,nargs) __VA_ARG_NSUFFIX_N_(prefix, nargs)
-#define __VA_ARG_NSUFFIX_N_(prefix,nargs) prefix ## nargs
-/* Front-ends to efi_callX to avoid compiler warnings */
-#define _cast64_uefi_call0(f) \
-  uefi_call0(f)
-#define _cast64_uefi_call1(f,a1) \
-  uefi_call1(f, (uint64_t)(a1))
-#define _cast64_uefi_call2(f,a1,a2) \
-  uefi_call2(f, (uint64_t)(a1), (uint64_t)(a2))
-#define _cast64_uefi_call3(f,a1,a2,a3) \
-  uefi_call3(f, (uint64_t)(a1), (uint64_t)(a2), (uint64_t)(a3))
-#define _cast64_uefi_call4(f,a1,a2,a3,a4) \
-  uefi_call4(f, (uint64_t)(a1), (uint64_t)(a2), (uint64_t)(a3), (uint64_t)(a4))
-#define _cast64_uefi_call5(f,a1,a2,a3,a4,a5) \
-  uefi_call5(f, (uint64_t)(a1), (uint64_t)(a2), (uint64_t)(a3), (uint64_t)(a4), \
-            (uint64_t)(a5))
-#define _cast64_uefi_call6(f,a1,a2,a3,a4,a5,a6) \
-  uefi_call6(f, (uint64_t)(a1), (uint64_t)(a2), (uint64_t)(a3), (uint64_t)(a4), \
-            (uint64_t)(a5), (uint64_t)(a6))
-#define _cast64_uefi_call7(f,a1,a2,a3,a4,a5,a6,a7) \
-  uefi_call7(f, (uint64_t)(a1), (uint64_t)(a2), (uint64_t)(a3), (uint64_t)(a4), \
-            (uint64_t)(a5), (uint64_t)(a6), (uint64_t)(a7))
-#define _cast64_uefi_call8(f,a1,a2,a3,a4,a5,a6,a7,a8) \
-  uefi_call8(f, (uint64_t)(a1), (uint64_t)(a2), (uint64_t)(a3), (uint64_t)(a4), \
-            (uint64_t)(a5), (uint64_t)(a6), (uint64_t)(a7), (uint64_t)(a8))
-#define _cast64_uefi_call9(f,a1,a2,a3,a4,a5,a6,a7,a8,a9) \
-  uefi_call9(f, (uint64_t)(a1), (uint64_t)(a2), (uint64_t)(a3), (uint64_t)(a4), \
-            (uint64_t)(a5), (uint64_t)(a6), (uint64_t)(a7), (uint64_t)(a8), \
-            (uint64_t)(a9))
-#define _cast64_uefi_call10(f,a1,a2,a3,a4,a5,a6,a7,a8,a9,a10) \
-  uefi_call10(f, (uint64_t)(a1), (uint64_t)(a2), (uint64_t)(a3), (uint64_t)(a4), \
-             (uint64_t)(a5), (uint64_t)(a6), (uint64_t)(a7), (uint64_t)(a8), \
-             (uint64_t)(a9), (uint64_t)(a10))
-/* main wrapper (va_num ignored) */
-#define uefi_call_wrapper(func,va_num,...)                        \
-  __VA_ARG_NSUFFIX__(_cast64_uefi_call, __VA_ARGS__) (func , ##__VA_ARGS__)
-#endif
 
 typedef struct {
     uint32_t    Data1;
@@ -223,11 +131,10 @@ typedef struct {
 
 /* efistdarg.h */
 typedef __builtin_va_list va_list;
-
-# define va_start(v,l)	__builtin_va_start(v,l)
-# define va_end(v)	__builtin_va_end(v)
-# define va_arg(v,l)	__builtin_va_arg(v,l)
-# define va_copy(d,s)	__builtin_va_copy(d,s)
+#define va_start(v,l)   __builtin_va_start(v,l)
+#define va_end(v)       __builtin_va_end(v)
+#define va_arg(v,l)     __builtin_va_arg(v,l)
+#define va_copy(d,s)    __builtin_va_copy(d,s)
 
 /* efierr.h */
 #define EFIWARN(a)                            (a)
@@ -1247,14 +1154,16 @@ extern int errno;
 /* stdlib.h */
 typedef int (*__compar_fn_t) (const void *, const void *);
 extern int atoi (const wchar_t *__nptr);
-extern long int atol (const wchar_t *__nptr);
-extern long int strtol (const wchar_t *__nptr, wchar_t **__endptr, int __base);
+extern int64_t atol (const wchar_t *__nptr);
+extern int64_t strtol (const wchar_t *__nptr, wchar_t **__endptr, int __base);
 extern void *malloc (size_t __size);
 extern void *calloc (size_t __nmemb, size_t __size);
 extern void *realloc (void *__ptr, size_t __size);
 extern void free (void *__ptr);
 extern void abort (void);
 extern void exit (int __status);
+/* exit Boot Services function. Returns 0 on success. */
+extern int exit_bs();
 extern void *bsearch (const void *__key, const void *__base, size_t __nmemb, size_t __size, __compar_fn_t __compar);
 extern void qsort (void *__base, size_t __nmemb, size_t __size, __compar_fn_t __compar);
 extern int mblen (const char *__s, size_t __n);
@@ -1264,7 +1173,9 @@ extern size_t mbstowcs (wchar_t *__pwcs, const char *__s, size_t __n);
 extern size_t wcstombs (char *__s, const wchar_t *__pwcs, size_t __n);
 
 /* stdio.h */
+#ifndef BUFSIZ
 #define BUFSIZ 8192
+#endif
 #define SEEK_SET	0	/* Seek from beginning of file.  */
 #define SEEK_CUR	1	/* Seek from current position.  */
 #define SEEK_END	2	/* Seek from end of file.  */
@@ -1289,15 +1200,26 @@ extern int vsprintf (wchar_t *__s, const wchar_t *__format, __builtin_va_list __
 extern int snprintf (wchar_t *__s, size_t __maxlen, const wchar_t *__format, ...);
 extern int vsnprintf (wchar_t *__s, size_t __maxlen, const wchar_t *__format, __builtin_va_list __arg);
 extern int getchar (void);
+/* non-blocking, only returns UNICODE if there's any key pressed, 0 otherwise */
+extern int getchar_ifany (void);
 extern int putchar (int __c);
 
 /* string.h */
+#ifndef __clang__
 #define memcpy  __builtin_memcpy
 #define memmove __builtin_memmove
 #define memset  __builtin_memset
 #define memcmp  __builtin_memcmp
 #define memchr  __builtin_memchr
 #define memrchr __builtin_memrchr
+#else
+extern void *memcpy (void *__dest, const void *__src, size_t __n);
+extern void *memmove (void *__dest, const void *__src, size_t __n);
+extern void *memset (void *__s, int __c, size_t __n);
+extern int memcmp (const void *__s1, const void *__s2, size_t __n);
+extern void *memchr (const void *__s, int __c, size_t __n);
+extern void *memrchr (const void *__s, int __c, size_t __n);
+#endif
 void *memmem(const void *haystack, size_t hl, const void *needle, size_t nl);
 void *memrmem(const void *haystack, size_t hl, const void *needle, size_t nl);
 extern wchar_t *strcpy (wchar_t *__dest, const wchar_t *__src);
@@ -1316,17 +1238,17 @@ extern size_t strlen (const wchar_t *__s);
 
 /* time.h */
 struct tm {
-  int tm_sec;			/* Seconds.	[0-60] (1 leap second) */
-  int tm_min;			/* Minutes.	[0-59] */
-  int tm_hour;			/* Hours.	[0-23] */
-  int tm_mday;			/* Day.		[1-31] */
-  int tm_mon;			/* Month.	[0-11] */
-  int tm_year;			/* Year	- 1900.  */
-  int tm_wday;			/* Day of week.	[0-6] */
-  int tm_yday;			/* Days in year.[0-365]	*/
-  int tm_isdst;			/* DST.		[-1/0/1]*/
+  int tm_sec;   /* Seconds. [0-60] (1 leap second) */
+  int tm_min;   /* Minutes. [0-59] */
+  int tm_hour;  /* Hours.   [0-23] */
+  int tm_mday;  /* Day.	    [1-31] */
+  int tm_mon;   /* Month.   [0-11] */
+  int tm_year;  /* Year     - 1900.  */
+  int tm_wday;  /* Day of week. [0-6] (not set) */
+  int tm_yday;  /* Days in year.[0-365] (not set) */
+  int tm_isdst; /* DST.     [-1/0/1]*/
 };
-extern struct tm *localtime ();
+extern struct tm *localtime (const time_t *__timer);
 
 /* unistd.h */
 extern unsigned int sleep (unsigned int __seconds);

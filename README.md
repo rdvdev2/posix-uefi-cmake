@@ -5,11 +5,11 @@ POSIX-UEFI
 We hate that horrible and ugly UEFI API, we want POSIX!
 ```
 
-This is a very small library (32k) that helps you to develop for UEFI under Linux (and other POSIX systems). It was greatly
-inspired by [gnu-efi](https://sourceforge.net/projects/gnu-efi) (big big kudos to those guys), but it is a lot smaller,
-easier to integrate (works with Clang and GNU gcc both) and easier to use because it provides a POSIX like API.
+This is a very small build environment that helps you to develop for UEFI under Linux (and other POSIX systems). It was
+greatly inspired by [gnu-efi](https://sourceforge.net/projects/gnu-efi) (big big kudos to those guys), but it is a lot
+smaller, easier to integrate (works with Clang and GNU gcc both) and easier to use because it provides a POSIX like API.
 
-To use it, you have two options:
+You have two options on how to integrate it into your project:
 
 Distributing as Static Library
 ------------------------------
@@ -36,8 +36,8 @@ Distributing as Source
 
 This is the preferred way, as it also provides a Makefile to set up your toolchain properly.
 
- 1. simply copy the `uefi` directory into your source tree (or set up a git submodule). A dozen files, about 140K in total.
- 2. create an extremely simple **Makefile** like below
+ 1. simply copy the `uefi` directory into your source tree (or set up a git submodule). A dozen files, about 96K in total.
+ 2. create an extremely simple **Makefile** like the one below
  3. compile your code for UEFI by running `make`
 
 ```
@@ -55,6 +55,8 @@ int main(int argc, wchar_t **argv)
     return 0;
 }
 ```
+By default it uses the host native's GNU gcc + ld, creates a shared object and converts that into .efi file. If `USE_LLVM`
+is given, then LLVM CLang + lld used, and native PE is generated, no conversion involved.
 
 ### Available Makefile Options
 
@@ -62,10 +64,10 @@ int main(int argc, wchar_t **argv)
 |------------|------------------------------------------------------------------------------------------------------|
 | `TARGET`   | the target application (required)                                                                    |
 | `SRCS`     | list of source files you want to compile (defaults to \*.c \*.S)                                     |
-| `CFALGS`   | compiler flags you want to use (empty by default, like "-Wall -pedantic -std=c99")                   |
+| `CFLAGS`   | compiler flags you want to use (empty by default, like "-Wall -pedantic -std=c99")                   |
 | `LDFLAGS`  | linker flags you want to use (I don't think you'll ever need this, just in case)                     |
 | `LIBS`     | additional libraries you want to link with (like "-lm", only static .a libraries allowed)            |
-| `USE_LLVM` | set this if you want LLVM Clang / Lld instead of GNU gcc / ld                                        |
+| `USE_LLVM` | set this if you want LLVM Clang + Lld instead of GNU gcc + ld                                        |
 | `ARCH`     | the target architecture (only x86_64 supported for now, but the toolchain can handle multiple archs) |
 
 Here's a more advanced **Makefile** example:
@@ -98,32 +100,31 @@ The EFI structures, enums, typedefs and defines are all converted to ANSI C stan
 BOOLEAN ->  boolean_t, UINTN -> uintn_t, EFI_MEMORY_DESCRIPTOR -> efi_memory_descriptor_t, and of course
 EFI_BOOT_SERVICES -> efi_boot_services_t.
 
-That header also provides an UEFI ABI wrapper, exactly the same as in gnu-efi, and functions to exit Boot Services
-and to dump memory for your convenience.
+Calling UEFI functions is as simple as with EDK II, just do the call, no need for "uefi_call_wrapper":
+```c
+    ST->ConOut->OutputString(ST->ConOut, L"Hello World!\r\n");
+```
 
-| Function              | Description                                        |
-|-----------------------|----------------------------------------------------|
-| `uefi_call_wrapper()` | call a function with UEFI ABI (provided by crt0)   |
-| `uefi_exit_bs()`      | leave this UEFI bullshit behind (provided by crt0) |
-| `uefi_dumpmem()`      | dump memory (provided by libuefi.a)                |
+There are two additional, non-POSIX calls in the library. One is `exit_bs()` to exit Boot Services, and the other is
+a non-blocking `getchar_ifany()`.
 
-Unlike gnu-efi, POSIX-UEFI does not pollute your application with unused GUID variables. It only provides header definitions,
-so you must create each GUID instance if and when you need them.
+Unlike gnu-efi, POSIX-UEFI does not pollute your application's namespace with unused GUID variables. It only provides
+header definitions, so you must create each GUID instance if and when you need them.
 
 Example:
 ```c
 efi_guid_t gopGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
 efi_gop_t *gop = NULL;
 
-status = uefi_call_wrapper(BS->LocateProtocol, 3, &gopGuid, NULL, (void**)&gop);
+status = BS->LocateProtocol(&gopGuid, NULL, (void**)&gop);
 ```
 
 Also unlike gnu-efi, POSIX-UEFI does not provide standard EFI headers. It expects that you have installed those under
-/usr/include/efi from EDK II or gnu-efi with your distro's package management solution, and POSIX-UEFI makes it possible
-for you to use those system wide headers. POSIX-UEFI itself ships the very minimum set of typedefs and structs.
+/usr/include/efi from EDK II or gnu-efi, and POSIX-UEFI makes it possible to use those system wide headers without
+naming conflicts. POSIX-UEFI itself ships the very minimum set of typedefs and structs (with POSIX-ized names).
 ```c
 #include <efi.h>
-#include <uefi.h>       /* this will work as expected! Both POSIX-UEFI and EDK II / gnu-efi typedefs accessible */
+#include <uefi.h> /* this will work as expected! Both POSIX-UEFI and EDK II / gnu-efi typedefs available */
 ```
 
 Notable Differences to POSIX libc
@@ -158,6 +159,7 @@ List of Provided POSIX Functions
 | free          | as usual                                                                   |
 | abort         | as usual                                                                   |
 | exit          | as usual                                                                   |
+| exit_bs       | leave this entire UEFI bullshit behind (exit Boot Services)                |
 | mbtowc        | as usual (UTF-8 char to wchar_t)                                           |
 | wctomb        | as usual (wchar_t to UTF-8 char)                                           |
 | mbstowcs      | as usual (UTF-8 string to wchar_t string)                                  |
@@ -189,8 +191,10 @@ List of Provided POSIX Functions
 String formating is limited; only supports padding via number prefixes, `%d`, `%x`, `%X`, `%c`, `%s`, `%q` and
 `%p`. Because it operates on wchar_t, it also supports the non-standard `%C` (printing an UTF-8 character, needs
 char\*), `%S` (printing an UTF-8 string), `%Q` (printing an escaped UTF-8 string). These functions don't allocate
-memory, but in return the total length of the output string cannot be longer than BUFSIZ (8k), except for the
-variants which have a maxlen argument.
+memory, but in return the total length of the output string cannot be longer than BUFSIZ (8k if you haven't
+defined otherwise), except for the variants which have a maxlen argument. For convenience, `%D` requires
+`efi_physical_address_t` as argument, and it dumps memory, 16 bytes or one line at once. With the padding
+modifier you can dump more lines, for example `%5D`.
 
 ### string.h
 
@@ -222,7 +226,7 @@ variants which have a maxlen argument.
 
 | Function      | Description                                                                |
 |---------------|----------------------------------------------------------------------------|
-| localtime     | no arguments, always returns current time in struct tm                     |
+| localtime     | argument unused, always returns current time in struct tm                  |
 
 ### unistd.h
 

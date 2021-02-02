@@ -30,9 +30,73 @@
 
 #include <uefi.h>
 
+/* for gcc we use the built-in variants, but clang doesn't have those */
+#ifdef __clang__
+void *memcpy(void *dst, const void *src, size_t n)
+{
+    uint8_t *a=(uint8_t*)dst,*b=(uint8_t*)src;
+    if(src && dst && n>0) {
+        while(n--) *a++ = *b++;
+    }
+    return dst;
+}
+
+void *memmove(void *dst, const void *src, size_t n)
+{
+    uint8_t *a=(uint8_t*)dst,*b=(uint8_t*)src;
+    if(src && dst && n>0) {
+        if((a<b && a+n>b) || (b<a && b+n>a)) {
+            a+=n-1; b+=n-1; while(n-->0) *a--=*b--;
+        } else {
+            while(n--) *a++ = *b++;
+        }
+    }
+    return dst;
+}
+
+void *memset(void *s, int c, size_t n)
+{
+    uint8_t *p=(uint8_t*)s;
+    if(s && n>0) {
+        while(n--) *p++ = c;
+    }
+    return s;
+}
+
+int memcmp(const void *s1, const void *s2, size_t n)
+{
+    uint8_t *a=(uint8_t*)s1,*b=(uint8_t*)s2;
+    if(s1 && s2 && n>0) {
+        while(n--) {
+            if(*a != *b) return *a - *b;
+            a++; b++;
+        }
+    }
+    return 0;
+}
+
+void *memchr (const void *s, int c, size_t n)
+{
+    uint8_t *e, *p=(uint8_t*)s;
+    if(s && n>0) {
+        for(e=p+n; p<e; p++) if(*p==(uint8_t)c) return p;
+    }
+    return NULL;
+}
+
+void *memrchr (const void *s, int c, size_t n)
+{
+    uint8_t *e, *p=(uint8_t*)s;
+    if(s && n>0) {
+        for(e=p+n; p<e; --e) if(*e==(uint8_t)c) return e;
+    }
+    return NULL;
+}
+#endif
+
 void *memmem(const void *haystack, size_t hl, const void *needle, size_t nl)
 {
-    char *c = (char*)haystack;
+    uint8_t *c = (uint8_t*)haystack;
     if(!haystack || !needle || !hl || !nl || nl > hl) return NULL;
     hl -= nl;
     while(hl) {
@@ -44,7 +108,7 @@ void *memmem(const void *haystack, size_t hl, const void *needle, size_t nl)
 
 void *memrmem(const void *haystack, size_t hl, const void *needle, size_t nl)
 {
-    char *c = (char*)haystack;
+    uint8_t *c = (uint8_t*)haystack;
     if(!haystack || !needle || !hl || !nl || nl > hl) return NULL;
     hl -= nl;
     c += hl;
