@@ -36,7 +36,7 @@ Distributing as Source
 
 This is the preferred way, as it also provides a Makefile to set up your toolchain properly.
 
- 1. simply copy the `uefi` directory into your source tree (or set up a git submodule). A dozen files, about 96K in total.
+ 1. simply copy the `uefi` directory into your source tree (or set up a git submodule). A dozen files, about 128K in total.
  2. create an extremely simple **Makefile** like the one below
  3. compile your code for UEFI by running `make`
 
@@ -83,6 +83,147 @@ USE_LLVM = 1
 include uefi/Makefile
 ```
 
+Notable Differences to POSIX libc
+---------------------------------
+
+This library is nowhere near as complete as glibc or musl for example. It only provides the very basic libc functions
+for you, because simplicity was one of its main goals. It is the best to say this is just wrapper around the UEFI API,
+rather than a POSIX compatible libc.
+
+All strings in the UEFI environment are stored with 16 bits wide characters. The library provides `wchar_t` type for that,
+so for example your main() is NOT like `main(int argc, char **argv)`, but `main(int argc, wchar_t **argv)` instead. All
+the other string related libc functions (like strlen() for example) use this wide character type too. For this reason, you
+must specify your string literals with `L""` and characters with `L''`. Functions that supposed to handle characters in int
+type (like `getchar`, `putchar`), do not truncate to unsigned char, rather to wchar_t. There's an additional `getchar_ifany`
+function, which does not block, but returns 0 when there's no key pressed.
+
+File types in dirent are limited to directories and files only (DT_DIR, DT_REG), but for stat in addition to S_IFDIR and
+S_IFREG, S_IFIFO also returned (for console streams: stdin, stdout, stderr).
+
+That's about it, everything else is the same.
+
+List of Provided POSIX Functions
+--------------------------------
+
+### dirent.h
+
+| Function      | Description                                                                |
+|---------------|----------------------------------------------------------------------------|
+| opendir       | as usual, but accepts wide char strings                                    |
+| readdir       | as usual                                                                   |
+| rewinddir     | as usual                                                                   |
+| closedir      | as usual                                                                   |
+
+Because UEFI has no concept of devices files nor of symlinks, only DT_DIR and DT_REG supported.
+
+### stdlib.h
+
+| Function      | Description                                                                |
+|---------------|----------------------------------------------------------------------------|
+| atoi          | as usual, but accepts wide char strings and understands "0x" prefix        |
+| atol          | as usual, but accepts wide char strings and understands "0x" prefix        |
+| strtol        | as usual, but accepts wide char strings                                    |
+| malloc        | as usual                                                                   |
+| calloc        | as usual                                                                   |
+| realloc       | as usual (needs testing)                                                   |
+| free          | as usual                                                                   |
+| abort         | as usual                                                                   |
+| exit          | as usual                                                                   |
+| exit_bs       | leave this entire UEFI bullshit behind (exit Boot Services)                |
+| mbtowc        | as usual (UTF-8 char to wchar_t)                                           |
+| wctomb        | as usual (wchar_t to UTF-8 char)                                           |
+| mbstowcs      | as usual (UTF-8 string to wchar_t string)                                  |
+| wcstombs      | as usual (wchar_t string to UTF-8 string)                                  |
+| srand         | as usual                                                                   |
+| rand          | as usual, uses EFI_RNG_PROTOCOL if possible                                |
+
+### stdio.h
+
+| Function      | Description                                                                |
+|---------------|----------------------------------------------------------------------------|
+| fopen         | as usual, but accepts wide char strings, for mode L"r", L"w" and L"a" only |
+| fclose        | as usual                                                                   |
+| fflush        | as usual                                                                   |
+| fread         | as usual, only real files accepted (no stdin)                              |
+| fwrite        | as usual, only real files accepted (no stdout nor stderr)                  |
+| fseek         | as usual, only real files accepted (no stdin, stdout, stderr)              |
+| ftell         | as usual, only real files accepted (no stdin, stdout, stderr)              |
+| feof          | as usual, only real files accepted (no stdin, stdout, stderr)              |
+| fprintf       | as usual, but accepts wide char strings, max BUFSIZ, files, stdout, stderr |
+| printf        | as usual, but accepts wide char strings, max BUFSIZ, stdout only           |
+| sprintf       | as usual, but accepts wide char strings, max BUFSIZ                        |
+| vfprintf      | as usual, but accepts wide char strings, max BUFSIZ, files, stdout, stderr |
+| vprintf       | as usual, but accepts wide char strings, max BUFSIZ                        |
+| vsprintf      | as usual, but accepts wide char strings, max BUFSIZ                        |
+| snprintf      | as usual, but accepts wide char strings                                    |
+| vsnprintf     | as usual, but accepts wide char strings                                    |
+| getchar       | as usual, waits for a key, blocking, stdin only (no redirects)             |
+| getchar_ifany | non-blocking, returns 0 if there was no key press, UNICODE otherwise       |
+| putchar       | as usual, stdout only (no redirects)                                       |
+
+File open modes: `r` read, `w` write, `a` append. Because of UEFI peculiarities, `wd` creates directory.
+
+String formating is limited; only supports padding via number prefixes, `%d`, `%x`, `%X`, `%c`, `%s`, `%q` and
+`%p`. Because it operates on wchar_t, it also supports the non-standard `%C` (printing an UTF-8 character, needs
+char\*), `%S` (printing an UTF-8 string), `%Q` (printing an escaped UTF-8 string). These functions don't allocate
+memory, but in return the total length of the output string cannot be longer than BUFSIZ (8k if you haven't
+defined otherwise), except for the variants which have a maxlen argument. For convenience, `%D` requires
+`efi_physical_address_t` as argument, and it dumps memory, 16 bytes or one line at once. With the padding
+modifier you can dump more lines, for example `%5D` gives you 5 lines (80 dumped bytes).
+
+### string.h
+
+| Function      | Description                                                                |
+|---------------|----------------------------------------------------------------------------|
+| memcpy        | as usual, works on bytes                                                   |
+| memmove       | as usual, works on bytes                                                   |
+| memset        | as usual, works on bytes                                                   |
+| memcmp        | as usual, works on bytes                                                   |
+| memchr        | as usual, works on bytes                                                   |
+| memrchr       | as usual, works on bytes                                                   |
+| memmem        | as usual, works on bytes                                                   |
+| memrmem       | as usual, works on bytes                                                   |
+| strcpy        | works on wide char strings                                                 |
+| strncpy       | works on wide char strings                                                 |
+| strcat        | works on wide char strings                                                 |
+| strncat       | works on wide char strings                                                 |
+| strcmp        | works on wide char strings                                                 |
+| strncmp       | works on wide char strings                                                 |
+| strdup        | works on wide char strings                                                 |
+| strchr        | works on wide char strings                                                 |
+| strrchr       | works on wide char strings                                                 |
+| strstr        | works on wide char strings                                                 |
+| strtok        | works on wide char strings                                                 |
+| strtok_r      | works on wide char strings                                                 |
+| strlen        | works on wide char strings                                                 |
+
+### sys/stat.h
+
+| Function      | Description                                                                |
+|---------------|----------------------------------------------------------------------------|
+| stat          | as usual, but accepts wide char strings                                    |
+| fstat         | UEFI doesn't have fd, so it uses FILE\*                                    |
+| mkdir         | as usual, but accepts wide char strings, and mode unused                   |
+
+Because UEFI has no concept of device major and minor number nor of inodes, struct stat's fields are limited.
+
+### time.h
+
+| Function      | Description                                                                |
+|---------------|----------------------------------------------------------------------------|
+| localtime     | argument unused, always returns current time in struct tm                  |
+| mktime        | as usual                                                                   |
+| time          | as usual                                                                   |
+
+### unistd.h
+
+| Function      | Description                                                                |
+|---------------|----------------------------------------------------------------------------|
+| usleep        | the usual                                                                  |
+| sleep         | the usual                                                                  |
+| unlink        | as usual, but accepts wide char strings                                    |
+| rmdir         | as usual, but accepts wide char strings                                    |
+
 Accessing UEFI Services
 -----------------------
 
@@ -126,111 +267,3 @@ naming conflicts. POSIX-UEFI itself ships the very minimum set of typedefs and s
 #include <efi.h>
 #include <uefi.h> /* this will work as expected! Both POSIX-UEFI and EDK II / gnu-efi typedefs available */
 ```
-
-Notable Differences to POSIX libc
----------------------------------
-
-This library is nowhere near as complete as glibc or musl for example. It only provides the very basic libc functions
-for you, because simplicity was one of its main goals. It is the best to say this is just wrapper around the UEFI API,
-rather than a POSIX compatible libc.
-
-All strings in the UEFI environment are stored with 16 bits wide characters. The library provides `wchar_t` type for that,
-so for example your main() is NOT like `main(int argc, char **argv)`, but `main(int argc, wchar_t **argv)` instead. All
-the other string related libc functions (like strlen() for example) use this wide character type too. Functions that supposed
-to handle characters in int type (like `getchar`, `putchar`), do not truncate to unsigned char, rather to wchar_t. For this
-reason, you must specify your string literals with `L""` and characters with `L''`. There's an additional `getchar_ifany`
-function, which does not block, but returns 0 when there's no key pressed.
-
-That's about it, everything else is the same.
-
-List of Provided POSIX Functions
---------------------------------
-
-### stdlib.h
-
-| Function      | Description                                                                |
-|---------------|----------------------------------------------------------------------------|
-| atoi          | as usual, but accepts wide char strings and understands "0x" prefix        |
-| atol          | as usual, but accepts wide char strings and understands "0x" prefix        |
-| strtol        | as usual, but accepts wide char strings                                    |
-| malloc        | as usual                                                                   |
-| calloc        | as usual                                                                   |
-| realloc       | as usual (needs testing)                                                   |
-| free          | as usual                                                                   |
-| abort         | as usual                                                                   |
-| exit          | as usual                                                                   |
-| exit_bs       | leave this entire UEFI bullshit behind (exit Boot Services)                |
-| mbtowc        | as usual (UTF-8 char to wchar_t)                                           |
-| wctomb        | as usual (wchar_t to UTF-8 char)                                           |
-| mbstowcs      | as usual (UTF-8 string to wchar_t string)                                  |
-| wcstombs      | as usual (wchar_t string to UTF-8 string)                                  |
-
-### stdio.h
-
-| Function      | Description                                                                |
-|---------------|----------------------------------------------------------------------------|
-| fopen         | as usual, but accepts wide char strings, for mode L"r", L"w" and L"a" only |
-| fclose        | as usual                                                                   |
-| fflush        | as usual                                                                   |
-| fread         | as usual, only real files accepted (no stdin)                              |
-| fwrite        | as usual, only real files accepted (no stdout nor stderr)                  |
-| fseek         | as usual, only real files accepted (no stdin, stdout, stderr)              |
-| ftell         | as usual, only real files accepted (no stdin, stdout, stderr)              |
-| fprintf       | as usual, but accepts wide char strings, max BUFSIZ, files, stdout, stderr |
-| printf        | as usual, but accepts wide char strings, max BUFSIZ, stdout only           |
-| sprintf       | as usual, but accepts wide char strings, max BUFSIZ                        |
-| vfprintf      | as usual, but accepts wide char strings, max BUFSIZ, files, stdout, stderr |
-| vprintf       | as usual, but accepts wide char strings, max BUFSIZ                        |
-| vsprintf      | as usual, but accepts wide char strings, max BUFSIZ                        |
-| snprintf      | as usual, but accepts wide char strings                                    |
-| vsnprintf     | as usual, but accepts wide char strings                                    |
-| getchar       | as usual, waits for a key, blocking, stdin only (no redirects)             |
-| getchar_ifany | non-blocking, returns 0 if there was no key press, UNICODE otherwise       |
-| putchar       | as usual, stdout only (no redirects)                                       |
-
-String formating is limited; only supports padding via number prefixes, `%d`, `%x`, `%X`, `%c`, `%s`, `%q` and
-`%p`. Because it operates on wchar_t, it also supports the non-standard `%C` (printing an UTF-8 character, needs
-char\*), `%S` (printing an UTF-8 string), `%Q` (printing an escaped UTF-8 string). These functions don't allocate
-memory, but in return the total length of the output string cannot be longer than BUFSIZ (8k if you haven't
-defined otherwise), except for the variants which have a maxlen argument. For convenience, `%D` requires
-`efi_physical_address_t` as argument, and it dumps memory, 16 bytes or one line at once. With the padding
-modifier you can dump more lines, for example `%5D`.
-
-### string.h
-
-| Function      | Description                                                                |
-|---------------|----------------------------------------------------------------------------|
-| memcpy        | as usual, works on bytes                                                   |
-| memmove       | as usual, works on bytes                                                   |
-| memset        | as usual, works on bytes                                                   |
-| memcmp        | as usual, works on bytes                                                   |
-| memchr        | as usual, works on bytes                                                   |
-| memrchr       | as usual, works on bytes                                                   |
-| memmem        | as usual, works on bytes                                                   |
-| memrmem       | as usual, works on bytes                                                   |
-| strcpy        | works on wide char strings                                                 |
-| strncpy       | works on wide char strings                                                 |
-| strcat        | works on wide char strings                                                 |
-| strncat       | works on wide char strings                                                 |
-| strcmp        | works on wide char strings                                                 |
-| strncmp       | works on wide char strings                                                 |
-| strdup        | works on wide char strings                                                 |
-| strchr        | works on wide char strings                                                 |
-| strrchr       | works on wide char strings                                                 |
-| strstr        | works on wide char strings                                                 |
-| strtok        | works on wide char strings                                                 |
-| strtok_r      | works on wide char strings                                                 |
-| strlen        | works on wide char strings                                                 |
-
-### time.h
-
-| Function      | Description                                                                |
-|---------------|----------------------------------------------------------------------------|
-| localtime     | argument unused, always returns current time in struct tm                  |
-
-### unistd.h
-
-| Function      | Description                                                                |
-|---------------|----------------------------------------------------------------------------|
-| usleep        | the usual                                                                  |
-| sleep         | the usual                                                                  |

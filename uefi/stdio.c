@@ -56,12 +56,72 @@ int fflush (FILE *__stream)
     return !EFI_ERROR(status);
 }
 
-FILE *fopen (const wchar_t *__filename, const char *__modes)
+int __remove (const wchar_t *__filename, int isdir)
+{
+    efi_status_t status;
+    efi_guid_t infGuid = EFI_FILE_INFO_GUID;
+    efi_file_info_t info;
+    uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t);
+    FILE *f = fopen(__filename, L"r");
+    if(f == stdin || f == stdout || f == stderr) {
+        errno = EBADF;
+        return -1;
+    }
+    if(isdir != -1) {
+        status = f->GetInfo(f, &infGuid, &fsiz, &info);
+        if(EFI_ERROR(status)) goto err;
+        if(isdir == 0 && (info.Attribute & EFI_FILE_DIRECTORY)) {
+            fclose(f); errno = EISDIR;
+            return -1;
+        }
+        if(isdir == 1 && !(info.Attribute & EFI_FILE_DIRECTORY)) {
+            fclose(f); errno = ENOTDIR;
+            return -1;
+        }
+    }
+    status = f->Delete(f);
+    if(EFI_ERROR(status)) {
+err:    __stdio_seterrno(status);
+        fclose(f);
+        return -1;
+    }
+    /* no need for fclose(f); */
+    free(f);
+    return 0;
+}
+
+int remove (const wchar_t *__filename)
+{
+    return __remove(__filename, -1);
+}
+
+FILE *fopen (const wchar_t *__filename, const wchar_t *__modes)
 {
     FILE *ret;
     efi_status_t status;
     efi_guid_t sfsGuid = EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID;
     efi_simple_file_system_protocol_t *sfs = NULL;
+    efi_guid_t infGuid = EFI_FILE_INFO_GUID;
+    efi_file_info_t info;
+    uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t);
+
+    if(!__filename || !*__filename || !__modes || !*__modes) {
+        errno = EINVAL;
+        return NULL;
+    }
+    /* fake some device names. UEFI has no concept of device files */
+    if(!strcmp(__filename, L"/dev/stdin")) {
+        if(__modes[0] == L'w' || __modes[0] == L'a') { errno = EPERM; return NULL; }
+        return stdin;
+    }
+    if(!strcmp(__filename, L"/dev/stdout")) {
+        if(__modes[0] == L'r') { errno = EPERM; return NULL; }
+        return stdout;
+    }
+    if(!strcmp(__filename, L"/dev/stderr")) {
+        if(__modes[0] == L'r') { errno = EPERM; return NULL; }
+        return stderr;
+    }
     if(!__root_dir && LIP) {
         status = BS->HandleProtocol(LIP->DeviceHandle, &sfsGuid, (void **)&sfs);
         if(!EFI_ERROR(status))
@@ -75,10 +135,19 @@ FILE *fopen (const wchar_t *__filename, const char *__modes)
     ret = (FILE*)malloc(sizeof(FILE));
     if(!ret) return NULL;
     status = __root_dir->Open(__root_dir, &ret, (wchar_t*)__filename,
-        __modes[0] == L'r' ? EFI_FILE_MODE_READ : (EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE), 0);
+        __modes[0] == L'w' ? (EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE) : EFI_FILE_MODE_READ,
+        __modes[1] == L'd' ? EFI_FILE_DIRECTORY : 0);
     if(EFI_ERROR(status)) {
-        __stdio_seterrno(status);
+err:    __stdio_seterrno(status);
         free(ret); ret = NULL;
+    }
+    status = ret->GetInfo(ret, &infGuid, &fsiz, &info);
+    if(EFI_ERROR(status)) goto err;
+    if(__modes[1] == L'd' && !(info.Attribute & EFI_FILE_DIRECTORY)) {
+        free(ret); errno = ENOTDIR; return NULL;
+    }
+    if(__modes[1] != L'd' && (info.Attribute & EFI_FILE_DIRECTORY)) {
+        free(ret); errno = EISDIR; return NULL;
     }
     if(__modes[0] == L'a') fseek(ret, 0, SEEK_END);
     return ret;
@@ -87,15 +156,32 @@ FILE *fopen (const wchar_t *__filename, const char *__modes)
 size_t fread (void *__ptr, size_t __size, size_t __n, FILE *__stream)
 {
     uintn_t bs = __size * __n;
-    efi_status_t status = __stream->Read(__stream, &bs, __ptr);
-    if(status == EFI_END_OF_FILE) bs = 0;
+    efi_status_t status;
+    if(__stream == stdin || __stream == stdout || __stream == stderr) {
+        errno = ESPIPE;
+        return 0;
+    }
+    status = __stream->Read(__stream, &bs, __ptr);
+    if(EFI_ERROR(status)) {
+        __stdio_seterrno(status);
+        return 0;
+    }
     return bs / __size;
 }
 
 size_t fwrite (const void *__ptr, size_t __size, size_t __n, FILE *__stream)
 {
     uintn_t bs = __size * __n;
-    efi_status_t status = __stream->Write(__stream, &bs, (void *)__ptr);
+    efi_status_t status;
+    if(__stream == stdin || __stream == stdout || __stream == stderr) {
+        errno = ESPIPE;
+        return 0;
+    }
+    status = __stream->Write(__stream, &bs, (void *)__ptr);
+    if(EFI_ERROR(status)) {
+        __stdio_seterrno(status);
+        return 0;
+    }
     return bs / __size;
 }
 
@@ -106,6 +192,10 @@ int fseek (FILE *__stream, long int __off, int __whence)
     efi_guid_t infoGuid = EFI_FILE_INFO_GUID;
     efi_file_info_t *info;
     uintn_t infosiz = sizeof(efi_file_info_t) + 16;
+    if(__stream == stdin || __stream == stdout || __stream == stderr) {
+        errno = ESPIPE;
+        return -1;
+    }
     switch(__whence) {
         case SEEK_END:
             status = __stream->GetInfo(__stream, &infoGuid, &infosiz, info);
@@ -131,8 +221,36 @@ int fseek (FILE *__stream, long int __off, int __whence)
 long int ftell (FILE *__stream)
 {
     uint64_t off = 0;
-    efi_status_t status = __stream->GetPosition(__stream, &off);
+    efi_status_t status;
+    if(__stream == stdin || __stream == stdout || __stream == stderr) {
+        errno = ESPIPE;
+        return -1;
+    }
+    status = __stream->GetPosition(__stream, &off);
     return EFI_ERROR(status) ? -1 : (long int)off;
+}
+
+int feof (FILE *__stream)
+{
+    uint64_t off = 0;
+    efi_guid_t infGuid = EFI_FILE_INFO_GUID;
+    efi_file_info_t info;
+    uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t);
+    efi_status_t status;
+    int ret;
+    if(__stream == stdin || __stream == stdout || __stream == stderr) {
+        errno = ESPIPE;
+        return 0;
+    }
+    status = __stream->GetPosition(__stream, &off);
+    if(EFI_ERROR(status)) {
+err:    __stdio_seterrno(status);
+        return 1;
+    }
+    status = __stream->GetInfo(__stream, &infGuid, &fsiz, &info);
+    if(EFI_ERROR(status)) goto err;
+    __stream->SetPosition(__stream, off);
+    return info.FileSize == off;
 }
 
 int vsnprintf(wchar_t *dst, size_t maxlen, const wchar_t *fmt, __builtin_va_list args)

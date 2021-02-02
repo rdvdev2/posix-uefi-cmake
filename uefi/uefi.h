@@ -62,6 +62,9 @@ typedef uint16_t wchar_t;
 typedef uint64_t uintn_t;
 typedef uint64_t size_t;
 typedef uint64_t time_t;
+typedef uint64_t mode_t;
+typedef uint64_t off_t;
+typedef uint64_t blkcnt_t;
 typedef uint64_t efi_status_t;
 typedef uint64_t efi_tpl_t;
 typedef uint64_t efi_lba_t;
@@ -644,6 +647,7 @@ typedef struct {
     efi_query_variable_info_t       QueryVariableInfo;
 } efi_runtime_services_t;
 extern efi_runtime_services_t *RT;
+#define gRT RT
 
 /** Boot Services ***/
 typedef struct {
@@ -759,6 +763,7 @@ typedef struct {
     efi_calculate_crc32_t       CalculateCrc32;
 } efi_boot_services_t;
 extern efi_boot_services_t *BS;
+#define gBS BS
 
 /*** Loaded Image Protocol ***/
 #ifndef EFI_LOADED_IMAGE_PROTOCOL_GUID
@@ -814,6 +819,7 @@ typedef struct {
     efi_configuration_table_t       *ConfigurationTable;
 } efi_system_table_t;
 extern efi_system_table_t *ST;
+#define gST ST
 
 /*** Simple File System Protocol ***/
 #ifndef EFI_SIMPLE_FILE_SYSTEM_PROTOCOL_GUID
@@ -829,7 +835,7 @@ extern efi_system_table_t *ST;
 #define EFI_FILE_READ_ONLY      0x0000000000000001
 #define EFI_FILE_HIDDEN         0x0000000000000002
 #define EFI_FILE_SYSTEM         0x0000000000000004
-#define EFI_FILE_RESERVIED      0x0000000000000008
+#define EFI_FILE_RESERVED       0x0000000000000008
 #define EFI_FILE_DIRECTORY      0x0000000000000010
 #define EFI_FILE_ARCHIVE        0x0000000000000020
 #define EFI_FILE_VALID_ATTR     0x0000000000000037
@@ -842,6 +848,10 @@ extern efi_system_table_t *ST;
 #define EFI_FILE_INFO_GUID  { 0x9576e92, 0x6d3f, 0x11d2, {0x8e, 0x39, 0x0, 0xa0, 0xc9, 0x69, 0x72, 0x3b} }
 #endif
 
+#ifndef FILENAME_MAX
+#define FILENAME_MAX 262    /* from FAT spec */
+#endif
+
 typedef struct {
     uint64_t                Size;
     uint64_t                FileSize;
@@ -850,7 +860,7 @@ typedef struct {
     efi_time_t              LastAccessTime;
     efi_time_t              ModificationTime;
     uint64_t                Attribute;
-    wchar_t                 FileName[1];
+    wchar_t                 FileName[FILENAME_MAX];
 } efi_file_info_t;
 
 typedef struct efi_file_handle_s efi_file_handle_t;
@@ -917,6 +927,19 @@ typedef struct {
     efi_handle_t StdOut;
     efi_handle_t StdErr;
 } efi_shell_interface_protocol_t;
+
+/*** Random Number Generator ***/
+#ifndef EFI_RNG_PROTOCOL_GUID
+#define EFI_RNG_PROTOCOL_GUID               { 0x3152bca5, 0xeade, 0x433d, {0x86, 0x2e, 0xc0, 0x1c, 0xdc, 0x29, 0x1f, 0x44} }
+#endif
+
+typedef efi_status_t (EFIAPI *efi_rng_get_info_t)(void *This, uintn_t *RNGAlgorithmListSize, efi_guid_t *RNGAlgorithmList);
+typedef efi_status_t (EFIAPI *efi_rng_get_rng_t)(void *This, efi_guid_t *RNGAlgorithm, uintn_t RNGValueLength, uint8_t *RNGValue);
+
+typedef struct {
+    efi_rng_get_info_t  GetInfo;
+    efi_rng_get_rng_t   GetRNG;
+} efi_rng_protocol_t;
 
 /*** Serial IO Protocol (not used, but could be useful to have) ***/
 #ifndef EFI_SERIAL_IO_PROTOCOL_GUID
@@ -1114,6 +1137,22 @@ typedef struct {
 #define min(x,y) ((x)<(y)?(x):(y))
 #define max(x,y) ((x)>(y)?(x):(y))
 
+/* dirent.h */
+#define IFTODT(mode)    (((mode) & 0170000) >> 12)
+#define DTTOIF(dirtype) ((dirtype) << 12)
+#define DT_DIR          4
+#define DT_REG          8
+struct dirent {
+    unsigned short int d_reclen;
+    unsigned char d_type;
+    wchar_t d_name[FILENAME_MAX];
+};
+typedef struct efi_file_handle_s DIR;
+extern DIR *opendir (const wchar_t *__name);
+extern struct dirent *readdir (DIR *__dirp);
+extern void rewinddir (DIR *__dirp);
+extern int closedir (DIR *__dirp);
+
 /* errno.h */
 extern int errno;
 #define	EPERM		 1	/* Operation not permitted */
@@ -1152,6 +1191,7 @@ extern int errno;
 #define	ERANGE		34	/* Math result not representable */
 
 /* stdlib.h */
+#define RAND_MAX       2147483647
 typedef int (*__compar_fn_t) (const void *, const void *);
 extern int atoi (const wchar_t *__nptr);
 extern int64_t atol (const wchar_t *__nptr);
@@ -1171,6 +1211,8 @@ extern int mbtowc (wchar_t * __pwc, const char * __s, size_t __n);
 extern int wctomb (char *__s, wchar_t __wchar);
 extern size_t mbstowcs (wchar_t *__pwcs, const char *__s, size_t __n);
 extern size_t wcstombs (char *__s, const wchar_t *__pwcs, size_t __n);
+extern void srand(unsigned int __seed);
+extern int rand(void);
 
 /* stdio.h */
 #ifndef BUFSIZ
@@ -1185,7 +1227,8 @@ extern size_t wcstombs (char *__s, const wchar_t *__pwcs, size_t __n);
 typedef struct efi_file_handle_s FILE;
 extern int fclose (FILE *__stream);
 extern int fflush (FILE *__stream);
-extern FILE *fopen (const wchar_t *__filename, const char *__modes);
+extern int remove (const wchar_t *__filename);
+extern FILE *fopen (const wchar_t *__filename, const wchar_t *__modes);
 extern size_t fread (void *__ptr, size_t __size, size_t __n, FILE *__stream);
 extern size_t fwrite (const void *__ptr, size_t __size, size_t __n, FILE *__s);
 extern int fseek (FILE *__stream, long int __off, int __whence);
@@ -1236,6 +1279,29 @@ extern wchar_t *strtok (wchar_t *__s, const wchar_t *__delim);
 extern wchar_t *strtok_r (wchar_t *__s, const wchar_t *__delim, wchar_t **__save_ptr);
 extern size_t strlen (const wchar_t *__s);
 
+/* sys/stat.h */
+#define S_IREAD    0400 /* Read by owner.  */
+#define S_IWRITE   0200 /* Write by owner.  */
+#define S_IFMT  0170000 /* These bits determine file type.  */
+#define S_IFIFO 0010000 /* FIFO.  */
+#define S_IFDIR 0040000 /* Directory.  */
+#define S_IFREG 0100000 /* Regular file.  */
+#define S_ISTYPE(mode, mask)    (((mode) & __S_IFMT) == (mask))
+#define S_ISDIR(mode)   __S_ISTYPE((mode), __S_IFDIR)
+#define S_ISREG(mode)   __S_ISTYPE((mode), __S_IFREG)
+#define S_ISFIFO(mode)  __S_ISTYPE((mode), __S_IFIFO)
+struct stat {
+    mode_t      st_mode;
+    off_t       st_size;
+    blkcnt_t    st_blocks;
+    time_t      st_atime;
+    time_t      st_mtime;
+    time_t      st_ctime;
+};
+extern int stat (const wchar_t *__file, struct stat *__buf);
+extern int fstat (FILE *__f, struct stat *__buf);
+extern int mkdir (const wchar_t *__path, mode_t __mode);
+
 /* time.h */
 struct tm {
   int tm_sec;   /* Seconds. [0-60] (1 leap second) */
@@ -1249,10 +1315,13 @@ struct tm {
   int tm_isdst; /* DST.     [-1/0/1]*/
 };
 extern struct tm *localtime (const time_t *__timer);
+extern time_t mktime(const struct tm *__tm);
+extern time_t time(time_t *__timer);
 
 /* unistd.h */
 extern unsigned int sleep (unsigned int __seconds);
 extern int usleep (unsigned long int __useconds);
+extern int unlink (const wchar_t *__filename);
 
 #ifdef  __cplusplus
 }

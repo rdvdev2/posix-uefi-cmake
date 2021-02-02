@@ -31,6 +31,7 @@
 #include <uefi.h>
 
 int errno = 0;
+static uint64_t __srand_seed = 6364136223846793005ULL;
 
 int atoi(const wchar_t *s)
 {
@@ -227,4 +228,24 @@ size_t wcstombs (char *__s, const wchar_t *__pwcs, size_t __n)
         __s += r;
     };
     return __s - orig;
+}
+
+void srand(unsigned int __seed)
+{
+    __srand_seed = __seed - 1;
+}
+
+int rand()
+{
+    efi_guid_t rngGuid = EFI_RNG_PROTOCOL_GUID;
+    efi_rng_protocol_t *rng = NULL;
+    efi_status_t status;
+    int ret = 0;
+
+    __srand_seed = 6364136223846793005ULL*__srand_seed + 1;
+    status = BS->LocateProtocol(&rngGuid, NULL, (void**)&rng);
+    if(!EFI_ERROR(status) && rng)
+        rng->GetRNG(rng, NULL, (uintn_t)sizeof(int), (uint8_t*)&ret);
+    ret ^= (int)(__srand_seed>>33);
+    return ret;
 }

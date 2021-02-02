@@ -1,5 +1,5 @@
 /*
- * unistd.c
+ * dirent.c
  *
  * Copyright (C) 2021 bzt (bztsrc@gitlab)
  *
@@ -24,32 +24,49 @@
  * DEALINGS IN THE SOFTWARE.
  *
  * This file is part of the POSIX-UEFI package.
- * @brief Implementing functions which are defined in unistd.h
+ * @brief Implementing functions which are defined in dirent.h
  *
  */
 
 #include <uefi.h>
 
-int __remove(const wchar_t *__filename, int isdir);
+extern void __stdio_seterrno(efi_status_t status);
+struct dirent __dirent;
 
-int usleep (unsigned long int __useconds)
+DIR *opendir (const wchar_t *__name)
 {
-    BS->Stall(__useconds);
-    return 0;
+    DIR *dp = (DIR*)fopen(__name, L"rd");
+    rewinddir(dp);
+    return dp;
 }
 
-unsigned int sleep (unsigned int __seconds)
+struct dirent *readdir (DIR *__dirp)
 {
-    BS->Stall((unsigned long int)__seconds * 1000000UL);
-    return 0;
+    efi_status_t status;
+    efi_file_info_t info;
+    uintn_t bs;
+    memset(&__dirent, 0, sizeof(struct dirent));
+    status = __dirp->Read(__dirp, &bs, &info);
+    if(EFI_ERROR(status) || !bs) {
+        if(EFI_ERROR(status)) __stdio_seterrno(status);
+        else errno = 0;
+        return NULL;
+    }
+    __dirent.d_type = info.Attribute & EFI_FILE_DIRECTORY ? DT_DIR : DT_REG;
+    __dirent.d_reclen = strlen(info.FileName);
+    strcpy(__dirent.d_name, info.FileName);
+    return &__dirent;
 }
 
-int unlink (const wchar_t *__filename)
+void rewinddir (DIR *__dirp)
 {
-    return __remove(__filename, 0);
+    if(__dirp)
+        __dirp->SetPosition(__dirp, 0);
 }
 
-int rmdir (const wchar_t *__filename)
+int closedir (DIR *__dirp)
 {
-    return __remove(__filename, 1);
+    return fclose((FILE*)__dirp);
 }
+
+
