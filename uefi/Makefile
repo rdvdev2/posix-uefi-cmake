@@ -1,7 +1,10 @@
+# detect architecture
 MYARCH = $(shell uname -m | sed s,i[3456789]86,ia32,)
 ifeq ($(ARCH),)
 ARCH = $(MYARCH)
 endif
+
+# get source files, generate object names
 SRCS ?= $(wildcard *.c) $(wildcard *.S)
 TMP = $(SRCS:.c=.o)
 OBJS = $(TMP:.S=.o)
@@ -9,16 +12,21 @@ CFLAGS += -mno-red-zone -fshort-wchar -fno-strict-aliasing -ffreestanding -fno-s
   -D__$(ARCH)__ -DHAVE_USE_MS_ABI \
   -I/usr/include -I. -I./uefi -I/usr/include/efi -I/usr/include/efi/$(ARCH) -I/usr/include/efi/protocol
 
+# for libuefi.a
 LIBSRCS = $(filter-out crt_$(ARCH).c,$(wildcard *.c)) $(wildcard *.S)
 TMP = $(LIBSRCS:.c=.o)
 LIBOBJS = $(TMP:.S=.o)
 
+# detect toolchain
+ifeq ($(wildcard /usr/bin/gcc),)
+USE_LLVM = 1
+endif
 ifeq ($(USE_LLVM),)
 CFLAGS += -Wno-builtin-declaration-mismatch -fpic -maccumulate-outgoing-args
 LDFLAGS += -nostdlib -shared -Bsymbolic -Luefi uefi/crt_$(ARCH).o
 LIBS += -o $(TARGET).so -luefi -T uefi/elf_$(ARCH)_efi.lds
 # see if we're cross-compiling
-ifeq ($(ARCH),$(MYARCH))
+ifneq ($(ARCH),$(MYARCH))
 CC = $(ARCH)-elf-gcc
 LD = $(ARCH)-elf-ld
 else
@@ -36,6 +44,7 @@ LD = lld-link
 OBJCOPY = true
 endif
 
+# recipies
 ifeq ($(wildcard uefi/Makefile),)
 ALLTARGETS = crt_$(ARCH).o libuefi.a build
 else
