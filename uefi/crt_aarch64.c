@@ -1,5 +1,5 @@
 /*
- * crt_x86_64.c
+ * crt_aarch64.c
  *
  * Copyright (C) 2021 bzt (bztsrc@gitlab)
  *
@@ -56,7 +56,7 @@ typedef struct
   Elf64_Xword   r_info;             /* Relocation type and symbol index */
 } Elf64_Rel;
 #define ELF64_R_TYPE(i)     ((i) & 0xffffffff)
-#define R_X86_64_RELATIVE   8       /* Adjust by program base */
+#define R_AARCH64_RELATIVE  1027    /* Adjust by program base */
 
 /* globals to store system table pointers */
 efi_handle_t IM = NULL;
@@ -74,9 +74,11 @@ void bootstrap()
 #ifndef __clang__
     "	.globl _start\n"
     "_start:\n"
-    "	lea ImageBase(%rip), %rdi\n"
-    "	lea _DYNAMIC(%rip), %rsi\n"
-    "	call uefi_init\n"
+    "	adr		x2, ImageBase\n"
+/*    "	mov		x2, xzr\n" */
+    "	adrp	x3, _DYNAMIC\n"
+    "	add		x3, x3, #:lo12:_DYNAMIC\n"
+    "	bl		uefi_init\n"
     "	ret\n"
 
     /* fake a relocation record, so that EFI won't complain */
@@ -95,36 +97,42 @@ void bootstrap()
 #endif
 
     /* setjmp and longjmp */
+    "	.p2align 3\n"
     "	.globl	setjmp\n"
     "setjmp:\n"
-    "	pop	%rsi\n"
-    "	movq	%rbx,0x00(%rdi)\n"
-    "	movq	%rsp,0x08(%rdi)\n"
-    "	push	%rsi\n"
-    "	movq	%rbp,0x10(%rdi)\n"
-    "	movq	%r12,0x18(%rdi)\n"
-    "	movq	%r13,0x20(%rdi)\n"
-    "	movq	%r14,0x28(%rdi)\n"
-    "	movq	%r15,0x30(%rdi)\n"
-    "	movq	%rsi,0x38(%rdi)\n"
-    "	xor	%rax,%rax\n"
+    "	mov	x16, sp\n"
+    "	stp	x19, x20, [x0, #0]\n"
+    "	stp	x21, x22, [x0, #16]\n"
+    "	stp	x23, x24, [x0, #32]\n"
+    "	stp	x25, x26, [x0, #48]\n"
+    "	stp	x27, x28, [x0, #64]\n"
+    "	stp	x29, x30, [x0, #80]\n"
+    "	str	x16, [x0, #96]\n"
+    "	stp	d8, d9, [x0, #112]\n"
+    "	stp	d10, d11, [x0, #128]\n"
+    "	stp	d12, d13, [x0, #144]\n"
+    "	stp	d14, d15, [x0, #160]\n"
+    "	mov	w0, #0\n"
     "	ret\n"
 
     "	.globl	longjmp\n"
     "longjmp:\n"
-    "	movl	%esi, %eax\n"
-    "	movq	0x00(%rdi), %rbx\n"
-    "	movq	0x08(%rdi), %rsp\n"
-    "	movq	0x10(%rdi), %rbp\n"
-    "	movq	0x18(%rdi), %r12\n"
-    "	movq	0x20(%rdi), %r13\n"
-    "	movq	0x28(%rdi), %r14\n"
-    "	movq	0x30(%rdi), %r15\n"
-    "	xor	%rdx,%rdx\n"
-    "	mov	$1,%rcx\n"
-    "	cmp	%rax,%rdx\n"
-    "	cmove	%rcx,%rax\n"
-    "	jmp	*0x38(%rdi)\n"
+    "	ldp	x19, x20, [x0, #0]\n"
+    "	ldp	x21, x22, [x0, #16]\n"
+    "	ldp	x23, x24, [x0, #32]\n"
+    "	ldp	x25, x26, [x0, #48]\n"
+    "	ldp	x27, x28, [x0, #64]\n"
+    "	ldp	x29, x30, [x0, #80]\n"
+    "	ldr	x16, [x0, #96]\n"
+    "	ldp	d8, d9, [x0, #112]\n"
+    "	ldp	d10, d11, [x0, #128]\n"
+    "	ldp	d12, d13, [x0, #144]\n"
+    "	ldp	d14, d15, [x0, #160]\n"
+    "	mov	sp, x16\n"
+    "	cmp	w1, #0\n"
+    "	mov	w0, #1\n"
+    "	csel	w0, w1, w0, ne\n"
+    "	br	x30\n"
     );
 }
 
@@ -132,10 +140,9 @@ void bootstrap()
  * Initialize POSIX-UEFI and call the application's main() function
  */
 int uefi_init (
-#ifndef __clang__
-    uintptr_t ldbase, Elf64_Dyn *dyn, efi_system_table_t *systab, efi_handle_t image
-#else
     efi_handle_t image, efi_system_table_t *systab
+#ifndef __clang__
+    , uintptr_t ldbase, Elf64_Dyn *dyn
 #endif
 ) {
     efi_guid_t shpGuid = EFI_SHELL_PARAMETERS_PROTOCOL_GUID;
@@ -162,7 +169,7 @@ int uefi_init (
     }
     if (rel && relent) {
         while (relsz > 0) {
-            if(ELF64_R_TYPE (rel->r_info) == R_X86_64_RELATIVE)
+            if(ELF64_R_TYPE (rel->r_info) == R_AARCH64_RELATIVE)
                 { addr = (unsigned long *)(ldbase + rel->r_offset); *addr += ldbase; break; }
             rel = (Elf64_Rel*) ((char *) rel + relent);
             relsz -= relent;

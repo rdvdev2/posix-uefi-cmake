@@ -68,7 +68,7 @@ is given, then LLVM CLang + lld used, and native PE is generated, no conversion 
 | `LDFLAGS`  | linker flags you want to use (I don't think you'll ever need this, just in case)                     |
 | `LIBS`     | additional libraries you want to link with (like "-lm", only static .a libraries allowed)            |
 | `USE_LLVM` | set this if you want LLVM Clang + Lld instead of GNU gcc + ld                                        |
-| `ARCH`     | the target architecture (only x86_64 supported for now, but the toolchain can handle multiple archs) |
+| `ARCH`     | the target architecture                                                                              |
 
 Here's a more advanced **Makefile** example:
 ```
@@ -82,6 +82,9 @@ LIBS = -lm
 USE_LLVM = 1
 include uefi/Makefile
 ```
+The build environment configurator was created in a way that it can handle any number of architectures, however
+there's only `x86_64` crt0 implemented for now. There's an experimental `aarch64` crt0, which only compiles with
+the LLVM toolchain, GNU ld has some issues with it, saying "unsupported relocation" for ImageBase.
 
 Notable Differences to POSIX libc
 ---------------------------------
@@ -94,11 +97,12 @@ All strings in the UEFI environment are stored with 16 bits wide characters. The
 so for example your main() is NOT like `main(int argc, char **argv)`, but `main(int argc, wchar_t **argv)` instead. All
 the other string related libc functions (like strlen() for example) use this wide character type too. For this reason, you
 must specify your string literals with `L""` and characters with `L''`. Functions that supposed to handle characters in int
-type (like `getchar`, `putchar`), do not truncate to unsigned char, rather to wchar_t. There's an additional `getchar_ifany`
-function, which does not block, but returns 0 when there's no key pressed.
+type (like `getchar`, `putchar`), do not truncate to unsigned char, rather to wchar_t.
 
 File types in dirent are limited to directories and files only (DT_DIR, DT_REG), but for stat in addition to S_IFDIR and
 S_IFREG, S_IFIFO also returned (for console streams: stdin, stdout, stderr).
+
+Note that `getenv` and `setenv` aren't POSIX standard, because UEFI environment variables are binary blobs.
 
 That's about it, everything else is the same.
 
@@ -114,7 +118,7 @@ List of Provided POSIX Functions
 | rewinddir     | as usual                                                                   |
 | closedir      | as usual                                                                   |
 
-Because UEFI has no concept of devices files nor of symlinks, only DT_DIR and DT_REG supported.
+Because UEFI has no concept of device files nor of symlinks, dirent fields are limited and only DT_DIR and DT_REG supported.
 
 ### stdlib.h
 
@@ -135,13 +139,30 @@ Because UEFI has no concept of devices files nor of symlinks, only DT_DIR and DT
 | mbstowcs      | as usual (UTF-8 string to wchar_t string)                                  |
 | wcstombs      | as usual (wchar_t string to UTF-8 string)                                  |
 | srand         | as usual                                                                   |
-| rand          | as usual, uses EFI_RNG_PROTOCOL if possible                                |
+| rand          | as usual, but uses EFI_RNG_PROTOCOL if possible                            |
+| getenv        | pretty UEFI specific                                                       |
+| setenv        | pretty UEFI specific                                                       |
+
+```c
+int exit_bs()
+```
+Exit Boot Services. Returns 0 on success.
+
+```c
+uint8_t *getenv(wchar_t *name, uintn_t *len);
+```
+Query the value of environment variable `name`. On success, `len` is set, and a malloc'd buffer returned. It is
+the caller's responsibility to free the buffer later. On error returns NULL.
+```c
+int setenv(wchar_t *name, uintn_t len, uint8_t *data);
+```
+Sets an environment variable by `name` with `data` of length `len`. On success returns 1, otherwise 0 on error.
 
 ### stdio.h
 
 | Function      | Description                                                                |
 |---------------|----------------------------------------------------------------------------|
-| fopen         | as usual, but accepts wide char strings, for mode L"r", L"w" and L"a" only |
+| fopen         | as usual, but accepts wide char strings, also for mode                     |
 | fclose        | as usual                                                                   |
 | fflush        | as usual                                                                   |
 | fread         | as usual, only real files accepted (no stdin)                              |
@@ -161,7 +182,7 @@ Because UEFI has no concept of devices files nor of symlinks, only DT_DIR and DT
 | getchar_ifany | non-blocking, returns 0 if there was no key press, UNICODE otherwise       |
 | putchar       | as usual, stdout only (no redirects)                                       |
 
-File open modes: `r` read, `w` write, `a` append. Because of UEFI peculiarities, `wd` creates directory.
+File open modes: `L"r"` read, `L"w"` write, `L"a"` append. Because of UEFI peculiarities, `L"wd"` creates directory.
 
 String formating is limited; only supports padding via number prefixes, `%d`, `%x`, `%X`, `%c`, `%s`, `%q` and
 `%p`. Because it operates on wchar_t, it also supports the non-standard `%C` (printing an UTF-8 character, needs
@@ -247,7 +268,7 @@ Calling UEFI functions is as simple as with EDK II, just do the call, no need fo
 ```
 
 There are two additional, non-POSIX calls in the library. One is `exit_bs()` to exit Boot Services, and the other is
-a non-blocking `getchar_ifany()`.
+a non-blocking version `getchar_ifany()`.
 
 Unlike gnu-efi, POSIX-UEFI does not pollute your application's namespace with unused GUID variables. It only provides
 header definitions, so you must create each GUID instance if and when you need them.
@@ -267,3 +288,14 @@ naming conflicts. POSIX-UEFI itself ships the very minimum set of typedefs and s
 #include <efi.h>
 #include <uefi.h> /* this will work as expected! Both POSIX-UEFI and EDK II / gnu-efi typedefs available */
 ```
+The advantage of this is that you can use the simplicity of the POSIX-UEFI library and build environment, while getting
+access to the most up-to-date protocol and interface definitions at the same time.
+
+License
+-------
+
+POSIX_UEFI is licensed under the terms of the MIT license.
+
+Cheers,
+
+bzt

@@ -249,3 +249,25 @@ int rand()
     ret ^= (int)(__srand_seed>>33);
     return ret;
 }
+
+uint8_t *getenv(wchar_t *name, uintn_t *len)
+{
+    efi_guid_t globGuid = EFI_GLOBAL_VARIABLE;
+    uint8_t tmp[EFI_MAXIMUM_VARIABLE_SIZE], *ret;
+    uint32_t attr;
+    efi_status_t status = RT->GetVariable(name, &globGuid, &attr, len, &tmp);
+    if(EFI_ERROR(status) || *len < 1 || !(ret = malloc((*len) + 1))) {
+        *len = 0;
+        return NULL;
+    }
+    memcpy(ret, tmp, *len);
+    ret[*len] = 0;
+    return ret;
+}
+
+int setenv(wchar_t *name, uintn_t len, uint8_t *data)
+{
+    efi_guid_t globGuid = EFI_GLOBAL_VARIABLE;
+    efi_status_t status = RT->SetVariable(name, &globGuid, 0, len, data);
+    return !EFI_ERROR(status);
+}

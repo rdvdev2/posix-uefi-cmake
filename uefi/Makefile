@@ -8,12 +8,14 @@ endif
 SRCS ?= $(wildcard *.c) $(wildcard *.S)
 TMP = $(SRCS:.c=.o)
 OBJS = $(TMP:.S=.o)
-CFLAGS += -mno-red-zone -fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check \
-  -D__$(ARCH)__ -DHAVE_USE_MS_ABI \
-  -I/usr/include -I. -I./uefi -I/usr/include/efi -I/usr/include/efi/$(ARCH) -I/usr/include/efi/protocol
+CFLAGS += -fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -I. -I./uefi \
+  -I/usr/include -I/usr/include/efi -I/usr/include/efi/protocol -I/usr/include/efi/$(ARCH) -D__$(ARCH)__
+ifeq ($(ARCH),x86_64)
+CFLAGS += -DHAVE_USE_MS_ABI -mno-red-zone
+endif
 
 # for libuefi.a
-LIBSRCS = $(filter-out crt_$(ARCH).c,$(wildcard *.c)) $(wildcard *.S)
+LIBSRCS = $(filter-out $(wildcard crt_*.c),$(wildcard *.c)) $(wildcard *.S)
 TMP = $(LIBSRCS:.c=.o)
 LIBOBJS = $(TMP:.S=.o)
 
@@ -22,7 +24,10 @@ ifeq ($(wildcard /usr/bin/gcc),)
 USE_LLVM = 1
 endif
 ifeq ($(USE_LLVM),)
-CFLAGS += -Wno-builtin-declaration-mismatch -fpic -maccumulate-outgoing-args
+ifeq ($(ARCH),x86_64)
+CFLAGS += -maccumulate-outgoing-args
+endif
+CFLAGS += -Wno-builtin-declaration-mismatch -fpic -fPIC
 LDFLAGS += -nostdlib -shared -Bsymbolic -Luefi uefi/crt_$(ARCH).o
 LIBS += -o $(TARGET).so -luefi -T uefi/elf_$(ARCH)_efi.lds
 # see if we're cross-compiling
@@ -54,7 +59,7 @@ endif
 all: $(ALLTARGETS)
 
 uefi/libuefi.a:
-	make --no-print-directory -C uefi libuefi.a USE_LLVM=$(USE_LLVM)
+	@make --no-print-directory -C uefi libuefi.a USE_LLVM=$(USE_LLVM) ARCH=$(ARCH)
 
 libuefi.lib: $(LIBOBJS)
 

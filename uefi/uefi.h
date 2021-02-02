@@ -213,6 +213,7 @@ typedef struct {
     uint64_t    FP;
     uint64_t    LR;
     uint64_t    IP0;
+    uint64_t    reserved;
     uint64_t    D8;
     uint64_t    D9;
     uint64_t    D10;
@@ -608,7 +609,7 @@ typedef efi_status_t (EFIAPI *efi_set_wakeup_time_t)(boolean_t Enable, efi_time_
 typedef efi_status_t (EFIAPI *efi_set_virtual_address_map_t)(uintn_t MemoryMapSize, uintn_t DescriptorSize,
     uint32_t DescriptorVersion, efi_memory_descriptor_t *VirtualMap);
 typedef efi_status_t (EFIAPI *efi_convert_pointer_t)(uintn_t DebugDisposition, void **Address);
-typedef efi_status_t (EFIAPI *efi_get_variable_t)(wchar_t *VariableName, efi_guid_t *VendorGuid, uintn_t *Attributes,
+typedef efi_status_t (EFIAPI *efi_get_variable_t)(wchar_t *VariableName, efi_guid_t *VendorGuid, uint32_t *Attributes,
     uintn_t *DataSize, void *Data);
 typedef efi_status_t (EFIAPI *efi_get_next_variable_name_t)(uintn_t *VariableNameSize, wchar_t *VariableName,
     efi_guid_t *VendorGuid);
@@ -1246,6 +1247,8 @@ extern int getchar (void);
 /* non-blocking, only returns UNICODE if there's any key pressed, 0 otherwise */
 extern int getchar_ifany (void);
 extern int putchar (int __c);
+extern uint8_t *getenv(wchar_t *name, uintn_t *len);
+extern int setenv(wchar_t *name, uintn_t len, uint8_t *data);
 
 /* string.h */
 #ifndef __clang__
