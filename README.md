@@ -133,7 +133,6 @@ Because UEFI has no concept of device files nor of symlinks, dirent fields are l
 | free          | as usual                                                                   |
 | abort         | as usual                                                                   |
 | exit          | as usual                                                                   |
-| exit_bs       | leave this entire UEFI bullshit behind (exit Boot Services)                |
 | mbtowc        | as usual (UTF-8 char to wchar_t)                                           |
 | wctomb        | as usual (wchar_t to UTF-8 char)                                           |
 | mbstowcs      | as usual (UTF-8 string to wchar_t string)                                  |
@@ -142,11 +141,6 @@ Because UEFI has no concept of device files nor of symlinks, dirent fields are l
 | rand          | as usual, but uses EFI_RNG_PROTOCOL if possible                            |
 | getenv        | pretty UEFI specific                                                       |
 | setenv        | pretty UEFI specific                                                       |
-
-```c
-int exit_bs()
-```
-Exit Boot Services. Returns 0 on success.
 
 ```c
 uint8_t *getenv(wchar_t *name, uintn_t *len);
@@ -181,6 +175,12 @@ Sets an environment variable by `name` with `data` of length `len`. On success r
 | getchar       | as usual, waits for a key, blocking, stdin only (no redirects)             |
 | getchar_ifany | non-blocking, returns 0 if there was no key press, UNICODE otherwise       |
 | putchar       | as usual, stdout only (no redirects)                                       |
+| exit_bs       | leave this entire UEFI bullshit behind (exit Boot Services)                |
+
+```c
+int exit_bs()
+```
+Exit Boot Services. Returns 0 on success.
 
 File open modes: `L"r"` read, `L"w"` write, `L"a"` append. Because of UEFI peculiarities, `L"wd"` creates directory.
 
@@ -191,6 +191,18 @@ memory, but in return the total length of the output string cannot be longer tha
 defined otherwise), except for the variants which have a maxlen argument. For convenience, `%D` requires
 `efi_physical_address_t` as argument, and it dumps memory, 16 bytes or one line at once. With the padding
 modifier you can dump more lines, for example `%5D` gives you 5 lines (80 dumped bytes).
+
+Special "device files" you can open:
+
+| Name                | Description                                        |
+|---------------------|----------------------------------------------------|
+| `/dev/stdin`        | returns ST->ConIn                                  |
+| `/dev/stdout`       | returns ST->ConOut, fprintf                        |
+| `/dev/stderr`       | returns ST->StdErr, fprintf                        |
+| `/dev/serial(baud)` | returns Serial IO protocol, fread, fwrite, fprintf |
+| `/dev/disk(n)`      | returns Block IO protocol, fread, fwrite           |
+
+With disk devices, `fread` and `fwrite` arguments look like this: fread(ptr, buffer size, lba number, stream).
 
 ### string.h
 

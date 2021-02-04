@@ -120,21 +120,6 @@ void exit (int __status)
     BS->Exit(IM, !__status ? 0 : (__status < 0 ? EFIERR(-__status) : EFIERR(__status)), 0, NULL);
 }
 
-int exit_bs()
-{
-    efi_status_t status;
-    efi_memory_descriptor_t *memory_map = NULL;
-    uintn_t cnt = 3, memory_map_size=0, map_key=0, desc_size=0;
-
-    while(cnt--) {
-        status = BS->GetMemoryMap(&memory_map_size, memory_map, &map_key, &desc_size, NULL);
-        if (status!=EFI_BUFFER_TOO_SMALL) break;
-        status = BS->ExitBootServices(IM, map_key);
-        if(!EFI_ERROR(status)) return 0;
-    }
-    return (int)(status & 0xffff);
-}
-
 void *bsearch(const void *key, const void *base, size_t nmemb, size_t size, __compar_fn_t cmp)
 {
     uint64_t s=0, e=nmemb, m;

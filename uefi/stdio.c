@@ -31,6 +31,9 @@
 #include <uefi.h>
 
 static efi_file_handle_t *__root_dir = NULL;
+static efi_serial_io_protocol_t *__ser = NULL;
+static efi_block_io_t **__blk_devs = NULL;
+static uintn_t __blk_ndevs = 0;
 
 void __stdio_seterrno(efi_status_t status)
 {
@@ -45,14 +48,34 @@ void __stdio_seterrno(efi_status_t status)
 
 int fclose (FILE *__stream)
 {
-    efi_status_t status = __stream->Close(__stream);
+    efi_status_t status = EFI_SUCCESS;
+    uintn_t i;
+    if(__stream == stdin || __stream == stdout || __stream == stderr || (__ser && __stream == (FILE*)__ser)) {
+        free(__stream);
+        return 1;
+    }
+    for(i = 0; i < __blk_ndevs; i++)
+        if(__stream == (FILE*)__blk_devs[i]) {
+            free(__stream);
+            return 1;
+        }
+    status = __stream->Close(__stream);
     free(__stream);
     return !EFI_ERROR(status);
 }
 
 int fflush (FILE *__stream)
 {
-    efi_status_t status = __stream->Flush(__stream);
+    efi_status_t status = EFI_SUCCESS;
+    uintn_t i;
+    if(__stream == stdin || __stream == stdout || __stream == stderr || (__ser && __stream == (FILE*)__ser)) {
+        return 1;
+    }
+    for(i = 0; i < __blk_ndevs; i++)
+        if(__stream == (FILE*)__blk_devs[i]) {
+            return 1;
+        }
+    status = __stream->Flush(__stream);
     return !EFI_ERROR(status);
 }
 
@@ -61,12 +84,17 @@ int __remove (const wchar_t *__filename, int isdir)
     efi_status_t status;
     efi_guid_t infGuid = EFI_FILE_INFO_GUID;
     efi_file_info_t info;
-    uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t);
+    uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t), i;
     FILE *f = fopen(__filename, L"r");
-    if(f == stdin || f == stdout || f == stderr) {
+    if(f == stdin || f == stdout || f == stderr || (__ser && f == (FILE*)__ser)) {
         errno = EBADF;
-        return -1;
+        return 1;
     }
+    for(i = 0; i < __blk_ndevs; i++)
+        if(f == (FILE*)__blk_devs[i]) {
+            errno = EBADF;
+            return 1;
+        }
     if(isdir != -1) {
         status = f->GetInfo(f, &infGuid, &fsiz, &info);
         if(EFI_ERROR(status)) goto err;
@@ -103,7 +131,7 @@ FILE *fopen (const wchar_t *__filename, const wchar_t *__modes)
     efi_simple_file_system_protocol_t *sfs = NULL;
     efi_guid_t infGuid = EFI_FILE_INFO_GUID;
     efi_file_info_t info;
-    uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t);
+    uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t), par, i;
 
     if(!__filename || !*__filename || !__modes || !*__modes) {
         errno = EINVAL;
@@ -121,6 +149,46 @@ FILE *fopen (const wchar_t *__filename, const wchar_t *__modes)
     if(!strcmp(__filename, L"/dev/stderr")) {
         if(__modes[0] == L'r') { errno = EPERM; return NULL; }
         return stderr;
+    }
+    if(!memcmp(__filename, L"/dev/serial", 22)) {
+        par = atol(__filename + 11);
+        if(!__ser) {
+            efi_guid_t serGuid = EFI_SERIAL_IO_PROTOCOL_GUID;
+            status = BS->LocateProtocol(&serGuid, NULL, (void**)&__ser);
+            if(EFI_ERROR(status) || !__ser) { errno = ENOENT; return NULL; }
+        }
+        __ser->SetAttributes(__ser, par > 9600 ? par : 115200, 0, 1000, NoParity, 8, OneStopBit);
+        return (FILE*)__ser;
+    }
+    if(!memcmp(__filename, L"/dev/disk", 18)) {
+        par = atol(__filename + 9);
+        if(!__blk_ndevs) {
+            efi_guid_t bioGuid = EFI_BLOCK_IO_PROTOCOL_GUID;
+            efi_handle_t *handles = NULL;
+            uintn_t handle_size = 0;
+            do {
+                handle_size += 16;
+                handles = realloc(handles, handle_size);
+                status = BS->LocateHandle(ByProtocol, &bioGuid, NULL, handle_size, handles);
+            } while(status == EFI_BUFFER_TOO_SMALL);
+            if(!EFI_ERROR(status) && handles) {
+                handle_size /= (uintn_t)sizeof(efi_handle_t);
+                __blk_devs = (efi_block_io_t**)malloc(handle_size * sizeof(efi_block_io_t*));
+                if(__blk_devs) {
+                    for(i = __blk_ndevs = 0; i < handle_size; i++)
+                        if(!EFI_ERROR(BS->HandleProtocol(handles[i], &bioGuid, (void **) &__blk_devs[__blk_ndevs])) &&
+                            __blk_devs[__blk_ndevs] && __blk_devs[__blk_ndevs]->Media &&
+                            __blk_devs[__blk_ndevs]->Media->BlockSize > 0)
+                                __blk_ndevs++;
+                } else
+                    __blk_ndevs = 0;
+                free(handles);
+            }
+        }
+        if(par >= 0 && par < __blk_ndevs)
+            return (FILE*)__blk_devs[par];
+        errno = ENOENT;
+        return NULL;
     }
     if(!__root_dir && LIP) {
         status = BS->HandleProtocol(LIP->DeviceHandle, &sfsGuid, (void **)&sfs);
@@ -155,13 +223,27 @@ err:    __stdio_seterrno(status);
 
 size_t fread (void *__ptr, size_t __size, size_t __n, FILE *__stream)
 {
-    uintn_t bs = __size * __n;
+    uintn_t bs = __size * __n, i;
     efi_status_t status;
     if(__stream == stdin || __stream == stdout || __stream == stderr) {
         errno = ESPIPE;
         return 0;
     }
-    status = __stream->Read(__stream, &bs, __ptr);
+    if(__ser && __stream == (FILE*)__ser) {
+        status = __ser->Read(__ser, &bs, __ptr);
+    } else {
+        for(i = 0; i < __blk_ndevs; i++)
+            if(__stream == (FILE*)__blk_devs[i]) {
+                status = __blk_devs[i]->ReadBlocks(__blk_devs[i], __blk_devs[i]->Media->MediaId, __n, __size, __ptr);
+                if(EFI_ERROR(status)) {
+                    __stdio_seterrno(status);
+                    return 0;
+                }
+                return ((__size + __blk_devs[i]->Media->BlockSize - 1) / __blk_devs[i]->Media->BlockSize) *
+                    __blk_devs[i]->Media->BlockSize;
+            }
+        status = __stream->Read(__stream, &bs, __ptr);
+    }
     if(EFI_ERROR(status)) {
         __stdio_seterrno(status);
         return 0;
@@ -171,13 +253,27 @@ size_t fread (void *__ptr, size_t __size, size_t __n, FILE *__stream)
 
 size_t fwrite (const void *__ptr, size_t __size, size_t __n, FILE *__stream)
 {
-    uintn_t bs = __size * __n;
+    uintn_t bs = __size * __n, i;
     efi_status_t status;
     if(__stream == stdin || __stream == stdout || __stream == stderr) {
         errno = ESPIPE;
         return 0;
     }
-    status = __stream->Write(__stream, &bs, (void *)__ptr);
+    if(__ser && __stream == (FILE*)__ser) {
+        status = __ser->Write(__ser, &bs, (void*)__ptr);
+    } else {
+        for(i = 0; i < __blk_ndevs; i++)
+            if(__stream == (FILE*)__blk_devs[i]) {
+                status = __blk_devs[i]->WriteBlocks(__blk_devs[i], __blk_devs[i]->Media->MediaId, __n, __size, (void*)__ptr);
+                if(EFI_ERROR(status)) {
+                    __stdio_seterrno(status);
+                    return 0;
+                }
+                return ((__size + __blk_devs[i]->Media->BlockSize - 1) / __blk_devs[i]->Media->BlockSize) *
+                    __blk_devs[i]->Media->BlockSize;
+            }
+        status = __stream->Write(__stream, &bs, (void *)__ptr);
+    }
     if(EFI_ERROR(status)) {
         __stdio_seterrno(status);
         return 0;
@@ -191,11 +287,20 @@ int fseek (FILE *__stream, long int __off, int __whence)
     efi_status_t status;
     efi_guid_t infoGuid = EFI_FILE_INFO_GUID;
     efi_file_info_t *info;
-    uintn_t infosiz = sizeof(efi_file_info_t) + 16;
+    uintn_t infosiz = sizeof(efi_file_info_t) + 16, i;
     if(__stream == stdin || __stream == stdout || __stream == stderr) {
         errno = ESPIPE;
         return -1;
     }
+    if(__ser && __stream == (FILE*)__ser) {
+        errno = EBADF;
+        return -1;
+    }
+    for(i = 0; i < __blk_ndevs; i++)
+        if(__stream == (FILE*)__blk_devs[i]) {
+            errno = EBADF;
+            return -1;
+        }
     switch(__whence) {
         case SEEK_END:
             status = __stream->GetInfo(__stream, &infoGuid, &infosiz, info);
@@ -221,11 +326,21 @@ int fseek (FILE *__stream, long int __off, int __whence)
 long int ftell (FILE *__stream)
 {
     uint64_t off = 0;
+    uintn_t i;
     efi_status_t status;
     if(__stream == stdin || __stream == stdout || __stream == stderr) {
         errno = ESPIPE;
         return -1;
     }
+    if(__ser && __stream == (FILE*)__ser) {
+        errno = EBADF;
+        return -1;
+    }
+    for(i = 0; i < __blk_ndevs; i++)
+        if(__stream == (FILE*)__blk_devs[i]) {
+            errno = EBADF;
+            return -1;
+        }
     status = __stream->GetPosition(__stream, &off);
     return EFI_ERROR(status) ? -1 : (long int)off;
 }
@@ -235,13 +350,22 @@ int feof (FILE *__stream)
     uint64_t off = 0;
     efi_guid_t infGuid = EFI_FILE_INFO_GUID;
     efi_file_info_t info;
-    uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t);
+    uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t), i;
     efi_status_t status;
     int ret;
     if(__stream == stdin || __stream == stdout || __stream == stderr) {
         errno = ESPIPE;
         return 0;
     }
+    if(__ser && __stream == (FILE*)__ser) {
+        errno = EBADF;
+        return 0;
+    }
+    for(i = 0; i < __blk_ndevs; i++)
+        if(__stream == (FILE*)__blk_devs[i]) {
+            errno = EBADF;
+            return 0;
+        }
     status = __stream->GetPosition(__stream, &off);
     if(EFI_ERROR(status)) {
 err:    __stdio_seterrno(status);
@@ -487,16 +611,23 @@ int printf(const wchar_t* fmt, ...)
 int vfprintf (FILE *__stream, const wchar_t *__format, __builtin_va_list args)
 {
     wchar_t dst[BUFSIZ];
-    uintn_t ret;
+    uintn_t ret, bs, i;
     if(__stream == stdin) return 0;
     ret = vsnprintf(dst, sizeof(dst), __format, args);
     if(ret < 1) return 0;
+    for(i = 0; i < __blk_ndevs; i++)
+        if(__stream == (FILE*)__blk_devs[i]) {
+            errno = EBADF;
+            return -1;
+        }
     if(__stream == stdout)
         ST->ConOut->OutputString(ST->ConOut, (wchar_t*)&dst);
     else if(__stream == stderr)
         ST->StdErr->OutputString(ST->StdErr, (wchar_t*)&dst);
+    else if(__ser && __stream == (FILE*)__ser)
+        __ser->Write(__ser, &ret, (void*)&dst);
     else
-        __stream->Write(__stream, &ret, (wchar_t*)&dst);
+        __stream->Write(__stream, &ret, (void*)&dst);
     return ret;
 }
 
@@ -533,4 +664,23 @@ int putchar (int __c)
     tmp[1] = 0;
     ST->ConOut->OutputString(ST->ConOut, (__c == L'\n' ? (wchar_t*)L"\r\n" : (wchar_t*)&tmp));
     return (int)tmp[0];
+}
+
+int exit_bs()
+{
+    efi_status_t status;
+    efi_memory_descriptor_t *memory_map = NULL;
+    uintn_t cnt = 3, memory_map_size=0, map_key=0, desc_size=0, i;
+    if(__blk_devs) {
+        free(__blk_devs);
+        __blk_devs = NULL;
+        __blk_ndevs = 0;
+    }
+    while(cnt--) {
+        status = BS->GetMemoryMap(&memory_map_size, memory_map, &map_key, &desc_size, NULL);
+        if (status!=EFI_BUFFER_TOO_SMALL) break;
+        status = BS->ExitBootServices(IM, map_key);
+        if(!EFI_ERROR(status)) return 0;
+    }
+    return (int)(status & 0xffff);
 }
