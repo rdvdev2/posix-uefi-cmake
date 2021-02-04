@@ -942,7 +942,7 @@ typedef struct {
     efi_rng_get_rng_t   GetRNG;
 } efi_rng_protocol_t;
 
-/*** Serial IO Protocol (not used, but could be useful to have) ***/
+/*** Serial IO Protocol ***/
 #ifndef EFI_SERIAL_IO_PROTOCOL_GUID
 #define EFI_SERIAL_IO_PROTOCOL_GUID { 0xBB25CF6F, 0xF1D4, 0x11D2, {0x9A, 0x0C, 0x00, 0x90, 0x27, 0x3F, 0xC1, 0xFD} }
 
