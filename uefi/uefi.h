@@ -460,6 +460,21 @@ extern void longjmp(jmp_buf env, uintn_t value) __attribute__((noreturn));
 #define SCAN_F12                        0x0016
 #define SCAN_ESC                        0x0017
 
+/* efigpt.h */
+#define PRIMARY_PART_HEADER_LBA         1
+#define EFI_PTAB_HEADER_ID  "EFI PART"
+#define EFI_PART_USED_BY_EFI            0x0000000000000001
+#define EFI_PART_REQUIRED_TO_FUNCTION   0x0000000000000002
+#define EFI_PART_USED_BY_OS             0x0000000000000004
+#define EFI_PART_REQUIRED_BY_OS         0x0000000000000008
+#define EFI_PART_BACKUP_REQUIRED        0x0000000000000010
+#define EFI_PART_USER_DATA              0x0000000000000020
+#define EFI_PART_CRITICAL_USER_DATA     0x0000000000000040
+#define EFI_PART_REDUNDANT_PARTITION    0x0000000000000080
+#define EFI_PART_TYPE_UNUSED_GUID           { 0x00000000, 0x0000, 0x0000, {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00} }
+#define EFI_PART_TYPE_EFI_SYSTEM_PART_GUID  { 0xc12a7328, 0xf81f, 0x11d2, {0xba, 0x4b, 0x00, 0xa0, 0xc9, 0x3e, 0xc9, 0x3b} }
+#define EFI_PART_TYPE_LEGACY_MBR_GUID       { 0x024dee41, 0x33e7, 0x11d3, {0x9d, 0x69, 0x00, 0x08, 0xc7, 0x81, 0xf3, 0x9f} }
+
 /* Protocol GUIDs */
 #ifndef INTERNAL_SHELL_GUID
 #define INTERNAL_SHELL_GUID         { 0xd65a6b8c, 0x71e5, 0x4df0, {0xa9, 0x09, 0xf0, 0xd2, 0x99, 0x2b, 0x5a, 0xa9} }
@@ -1132,6 +1147,29 @@ typedef struct {
   uint64_t                          PciOptionRomCount;
   efi_pci_option_rom_descriptor_t   *PciOptionRomDescriptors;
 } efi_pci_option_rom_table_t;
+
+/*** GPT partitioning table (not used, but could be useful to have) ***/
+typedef struct {
+    efi_table_header_t  Header;
+    efi_lba_t           MyLBA;
+    efi_lba_t           AlternateLBA;
+    efi_lba_t           FirstUsableLBA;
+    efi_lba_t           LastUsableLBA;
+    efi_guid_t          DiskGUID;
+    efi_lba_t           PartitionEntryLBA;
+    uint32_t            NumberOfPartitionEntries;
+    uint32_t            SizeOfPartitionEntry;
+    uint32_t            PartitionEntryArrayCRC32;
+} efi_partition_table_header_t;
+
+typedef struct {
+    efi_guid_t  PartitionTypeGUID;
+    efi_guid_t  UniquePartitionGUID;
+    efi_lba_t   StartingLBA;
+    efi_lba_t   EndingLBA;
+    uint64_t    Attributes;
+    wchar_t     PartitionName[36];
+} efi_partition_entry_t;
 
 /*** POSIX definitions ***/
 #define abs(x) ((x)<0?-(x):(x))
