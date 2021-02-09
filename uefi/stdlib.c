@@ -76,7 +76,7 @@ void *malloc (size_t __size)
 {
     void *ret = NULL;
     efi_status_t status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, __size, &ret);
-    if(!EFI_ERROR(status) || !ret) errno = ENOMEM;
+    if(EFI_ERROR(status) || !ret) { errno = ENOMEM; ret = NULL; }
     return ret;
 }
 
@@ -93,7 +93,7 @@ void *realloc (void *__ptr, size_t __size)
     void *ret = __ptr;
     /* not sure if this works */
     efi_status_t status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, __size, &ret);
-    if(!EFI_ERROR(status) || !ret) errno = ENOMEM;
+    if(EFI_ERROR(status) || !ret) { errno = ENOMEM; ret = NULL; }
     return ret;
 #else
     void *ret = malloc(__size);
@@ -107,7 +107,7 @@ void *realloc (void *__ptr, size_t __size)
 void free (void *__ptr)
 {
     efi_status_t status = BS->FreePool(__ptr);
-    if(!EFI_ERROR(status)) errno = ENOMEM;
+    if(EFI_ERROR(status)) errno = ENOMEM;
 }
 
 void abort ()
