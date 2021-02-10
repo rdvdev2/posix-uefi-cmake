@@ -1,13 +1,16 @@
 POSIX-UEFI
 ==========
 
-```
-We hate that horrible and ugly UEFI API, we want POSIX!
-```
+<blockquote>We hate that horrible and ugly UEFI API, we want POSIX!</blockquote>
 
 This is a very small build environment that helps you to develop for UEFI under Linux (and other POSIX systems). It was
 greatly inspired by [gnu-efi](https://sourceforge.net/projects/gnu-efi) (big big kudos to those guys), but it is a lot
-smaller, easier to integrate (works with Clang and GNU gcc both) and easier to use because it provides a POSIX like API.
+smaller, easier to integrate (works with Clang and GNU gcc both) and easier to use because it provides a POSIX like API
+for your UEFI application.
+
+An UEFI environment consist of two parts: a firmware with GUID protocol interfaces and a user library. We cannot change
+the former, but we can make the second frendlier. That's what POSIX-UEFI does for your application. It is a small API
+wrapper library around the GUID protocols, not a fully blown POSIX compatible libc implementation.
 
 You have two options on how to integrate it into your project:
 
