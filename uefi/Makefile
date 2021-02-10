@@ -34,14 +34,20 @@ LIBS += -o $(TARGET).so -luefi -T uefi/elf_$(ARCH)_efi.lds
 ifneq ($(ARCH),$(MYARCH))
 CC = $(ARCH)-elf-gcc
 LD = $(ARCH)-elf-ld
+OBJCOPY ?= $(ARCH)-elf-objcopy
 else
 CC = gcc
 LD = ld
-endif
 OBJCOPY ?= objcopy
+endif
+ifeq ($(ARCH),aarch64)
+EFIARCH = pei-aarch64-little
+else
+EFIARCH = efi-app-$(ARCH)
+endif
 AR ?= ar
 else
-CFLAGS += --target=$(ARCH)-pc-win32-coff -Wno-builtin-requires-header -Wno-incompatible-library-redeclaration
+CFLAGS += --target=$(ARCH)-pc-win32-coff -Wno-builtin-requires-header -Wno-incompatible-library-redeclaration -Wno-long-long
 LDFLAGS += -subsystem:efi_application -nodefaultlib -dll -entry:uefi_init uefi/*.o
 LIBS = -out:$(TARGET)
 CC = clang
@@ -73,7 +79,7 @@ endif
 
 $(TARGET): $(TARGET).so
 ifeq ($(USE_LLVM),)
-	@$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .rel.* -j .rela.* -j .reloc --target efi-app-$(ARCH) --subsystem=10 $^ $@
+	@$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .rel.* -j .rela.* -j .reloc --target $(EFIARCH) --subsystem=10 $^ $@ || echo target: $(EFIARCH)
 	@rm $(TARGET).so
 endif
 

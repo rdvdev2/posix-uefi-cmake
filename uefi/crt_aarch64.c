@@ -74,8 +74,7 @@ void bootstrap()
 #ifndef __clang__
     "	.globl _start\n"
     "_start:\n"
-    "	adr		x2, ImageBase\n"
-/*    "	mov		x2, xzr\n" */
+    "	ldr		x2, =ImageBase\n"
     "	adrp	x3, _DYNAMIC\n"
     "	add		x3, x3, #:lo12:_DYNAMIC\n"
     "	bl		uefi_init\n"
@@ -95,8 +94,10 @@ void bootstrap()
     "__chkstk:\n"
     "	ret\n"
 #endif
+    );
 
     /* setjmp and longjmp */
+    __asm__ __volatile__ (
     "	.p2align 3\n"
     "	.globl	setjmp\n"
     "setjmp:\n"
@@ -114,7 +115,8 @@ void bootstrap()
     "	stp	d14, d15, [x0, #160]\n"
     "	mov	w0, #0\n"
     "	ret\n"
-
+    );
+    __asm__ __volatile__ (
     "	.globl	longjmp\n"
     "longjmp:\n"
     "	ldp	x19, x20, [x0, #0]\n"

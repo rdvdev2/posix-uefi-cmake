@@ -51,6 +51,9 @@ typedef long long           int64_t;
 typedef unsigned long long  uint64_t;
 typedef unsigned long long  uintptr_t;
 #endif
+extern char c_assert1[sizeof(uint32_t) == 4  ? 1 : -1];
+extern char c_assert2[sizeof(uint64_t) == 8  ? 1 : -1];
+extern char c_assert3[sizeof(uintptr_t) == 8 ? 1 : -1];
 
 #ifndef NULL
 #define NULL ((void*)0)
@@ -901,7 +904,7 @@ typedef efi_status_t (EFIAPI *efi_file_set_info_t)(efi_file_handle_t *File, efi_
     void *Buffer);
 typedef efi_status_t (EFIAPI *efi_file_flush_t)(efi_file_handle_t *File);
 
-typedef struct efi_file_handle_s {
+struct efi_file_handle_s {
     uint64_t                Revision;
     efi_file_open_t         Open;
     efi_file_close_t        Close;
@@ -913,7 +916,7 @@ typedef struct efi_file_handle_s {
     efi_file_get_info_t     GetInfo;
     efi_file_set_info_t     SetInfo;
     efi_file_flush_t        Flush;
-} efi_file_handle_t;
+};
 
 /*** Shell Parameter Protocols ***/
 #ifndef EFI_SHELL_PARAMETERS_PROTOCOL_GUID
@@ -939,9 +942,9 @@ typedef struct {
     uintn_t         Argc;
     wchar_t         **RedirArgv;
     uintn_t         RedirArgc;
-    efi_handle_t StdIn;
-    efi_handle_t StdOut;
-    efi_handle_t StdErr;
+    efi_handle_t    StdIn;
+    efi_handle_t    StdOut;
+    efi_handle_t    StdErr;
 } efi_shell_interface_protocol_t;
 
 /*** Random Number Generator ***/

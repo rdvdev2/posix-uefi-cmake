@@ -93,8 +93,10 @@ void bootstrap()
     "__chkstk:\n"
     "	ret\n"
 #endif
+    );
 
     /* setjmp and longjmp */
+    __asm__ __volatile__ (
     "	.globl	setjmp\n"
     "setjmp:\n"
     "	pop	%rsi\n"
@@ -109,7 +111,8 @@ void bootstrap()
     "	movq	%rsi,0x38(%rdi)\n"
     "	xor	%rax,%rax\n"
     "	ret\n"
-
+    );
+    __asm__ __volatile__ (
     "	.globl	longjmp\n"
     "longjmp:\n"
     "	movl	%esi, %eax\n"

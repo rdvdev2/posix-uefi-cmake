@@ -83,8 +83,8 @@ USE_LLVM = 1
 include uefi/Makefile
 ```
 The build environment configurator was created in a way that it can handle any number of architectures, however
-there's only `x86_64` crt0 implemented for now. There's an experimental `aarch64` crt0, which only compiles with
-the LLVM toolchain, GNU ld has some issues with it, saying "unsupported relocation" for ImageBase.
+only `x86_64` crt0 has been throughfully tested for now. There's an `aarch64` crt0 too, but since I don't have
+an ARM UEFI board, it hasn't been tested on real machine. Should work though.
 
 Notable Differences to POSIX libc
 ---------------------------------
