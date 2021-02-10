@@ -9,7 +9,7 @@ smaller, easier to integrate (works with Clang and GNU gcc both) and easier to u
 for your UEFI application.
 
 An UEFI environment consist of two parts: a firmware with GUID protocol interfaces and a user library. We cannot change
-the former, but we can make the second frendlier. That's what POSIX-UEFI does for your application. It is a small API
+the former, but we can make the second friendlier. That's what POSIX-UEFI does for your application. It is a small API
 wrapper library around the GUID protocols, not a fully blown POSIX compatible libc implementation.
 
 You have two options on how to integrate it into your project:
