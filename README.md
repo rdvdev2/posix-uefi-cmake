@@ -62,16 +62,8 @@ By default it uses Clang + lld, and PE is generated without conversion. If `USE_
 used to create a shared object and get converted into an .efi file.
 
 If you comment out `USE_UTF8` in uefi.h, then all character representation will use `wchar_t`, and there will be no string
-conversion between your application and the UEFI interfaces. This also means you must use `L""` and `L''` literals everywhere:
-```c
-#include <uefi.h>
-
-int main(int argc, wchar_t **argv)
-{
-    printf(L"Hello World!\n");
-    return 0;
-}
-```
+conversion between your application and the UEFI interfaces. This also means you must use `L""` and `L''` literals everywhere,
+and you main would receive `wchar_t **argv`.
 
 ### Available Makefile Options
 
