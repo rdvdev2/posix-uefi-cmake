@@ -1075,6 +1075,11 @@ typedef struct {
     efi_block_flush_t       FlushBlocks;
 } efi_block_io_t;
 
+typedef struct {
+    off_t                   offset;
+    efi_block_io_t          *bio;
+} block_file_t;
+
 /*** Graphics Output Protocol (not used, but could be useful to have) ***/
 #ifndef EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID
 #define EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID { 0x9042a9de, 0x23dc, 0x4a38, {0x96, 0xfb, 0x7a, 0xde, 0xd0, 0x80, 0x51, 0x6a } }
@@ -1139,6 +1144,37 @@ typedef struct {
     efi_gop_blt_t           Blt;
     efi_gop_mode_t          *Mode;
 } efi_gop_t;
+
+/*** Simple Pointer Protocol (not used, but could be useful to have) ***/
+#ifndef EFI_SIMPLE_POINTER_PROTOCOL_GUID
+#define EFI_SIMPLE_POINTER_PROTOCOL_GUID { 0x31878c87, 0xb75, 0x11d5, { 0x9a, 0x4f, 0x0, 0x90, 0x27, 0x3f, 0xc1, 0x4d } }
+#endif
+
+typedef struct {
+    int32_t                 RelativeMovementX;
+    int32_t                 RelativeMovementY;
+    int32_t                 RelativeMovementZ;
+    boolean_t               LeftButton;
+    boolean_t               RightButton;
+} efi_simple_pointer_state_t;
+
+typedef struct {
+    uint64_t                ResolutionX;
+    uint64_t                ResolutionY;
+    uint64_t                ResolutionZ;
+    boolean_t               LeftButton;
+    boolean_t               RightButton;
+} efi_simple_pointer_mode_t;
+
+typedef efi_status_t (EFIAPI *efi_simple_pointer_reset_t) (void *This, boolean_t ExtendedVerification);
+typedef efi_status_t (EFIAPI *efi_simple_pointer_get_state_t) (void *This, efi_simple_pointer_state_t *State);
+
+typedef struct {
+    efi_simple_pointer_reset_t Reset;
+    efi_simple_pointer_get_state_t GetState;
+    efi_event_t WaitForInput;
+    efi_simple_pointer_mode_t *Mode;
+} efi_simple_pointer_protocol_t;
 
 /*** Option ROM Protocol (not used, but could be useful to have) ***/
 #ifndef EFI_PCI_OPTION_ROM_TABLE_GUID
@@ -1339,12 +1375,16 @@ extern size_t strlen (const char_t *__s);
 #define S_IWRITE   0200 /* Write by owner.  */
 #define S_IFMT  0170000 /* These bits determine file type.  */
 #define S_IFIFO 0010000 /* FIFO.  */
+#define S_IFCHR 0020000 /* Character device.  */
 #define S_IFDIR 0040000 /* Directory.  */
+#define S_IFBLK 0060000 /* Block device.  */
 #define S_IFREG 0100000 /* Regular file.  */
-#define S_ISTYPE(mode, mask)    (((mode) & __S_IFMT) == (mask))
-#define S_ISDIR(mode)   __S_ISTYPE((mode), __S_IFDIR)
-#define S_ISREG(mode)   __S_ISTYPE((mode), __S_IFREG)
-#define S_ISFIFO(mode)  __S_ISTYPE((mode), __S_IFIFO)
+#define S_ISTYPE(mode, mask)    (((mode) & S_IFMT) == (mask))
+#define S_ISCHR(mode)   S_ISTYPE((mode), S_IFCHR)
+#define S_ISDIR(mode)   S_ISTYPE((mode), S_IFDIR)
+#define S_ISBLK(mode)   S_ISTYPE((mode), S_IFBLK)
+#define S_ISREG(mode)   S_ISTYPE((mode), S_IFREG)
+#define S_ISFIFO(mode)  S_ISTYPE((mode), S_IFIFO)
 struct stat {
     mode_t      st_mode;
     off_t       st_size;

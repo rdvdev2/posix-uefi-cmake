@@ -39,7 +39,7 @@ Distributing as Source
 
 This is the preferred way, as it also provides a Makefile to set up your toolchain properly.
 
- 1. simply copy the `uefi` directory into your source tree (or set up a git submodule). A dozen files, about 128K in total.
+ 1. simply copy the `uefi` directory into your source tree (or set up a git submodule). A dozen files, about 132K in total.
  2. create an extremely simple **Makefile** like the one below
  3. compile your code for UEFI by running `make`
 
@@ -175,16 +175,16 @@ Sets an environment variable by `name` with `data` of length `len`. On success r
 | fopen         | as usual, but might accept wide char strings, also for mode                |
 | fclose        | as usual                                                                   |
 | fflush        | as usual                                                                   |
-| fread         | as usual, only real files accepted (no stdin)                              |
-| fwrite        | as usual, only real files accepted (no stdout nor stderr)                  |
-| fseek         | as usual, only real files accepted (no stdin, stdout, stderr)              |
-| ftell         | as usual, only real files accepted (no stdin, stdout, stderr)              |
-| feof          | as usual, only real files accepted (no stdin, stdout, stderr)              |
-| fprintf       | as usual, might be wide char strings, max BUFSIZ, files, stdout, stderr    |
+| fread         | as usual, only real files and blk io accepted (no stdin)                   |
+| fwrite        | as usual, only real files and blk io accepted (no stdout nor stderr)       |
+| fseek         | as usual, only real files and blk io accepted (no stdin, stdout, stderr)   |
+| ftell         | as usual, only real files and blk io accepted (no stdin, stdout, stderr)   |
+| feof          | as usual, only real files and blk io accepted (no stdin, stdout, stderr)   |
+| fprintf       | as usual, might be wide char strings, BUFSIZ, files, ser, stdout, stderr   |
 | printf        | as usual, might be wide char strings, max BUFSIZ, stdout only              |
 | sprintf       | as usual, might be wide char strings, max BUFSIZ                           |
-| vfprintf      | as usual, might be wide char strings, max BUFSIZ, files, stdout, stderr    |
-| vprintf       | as usual, might be wide char strings, max BUFSIZ                           |
+| vfprintf      | as usual, might be wide char strings, BUFSIZ, files, ser, stdout, stderr   |
+| vprintf       | as usual, might be wide char strings, max BUFSIZ, stdout only              |
 | vsprintf      | as usual, might be wide char strings, max BUFSIZ                           |
 | snprintf      | as usual, might be wide char strings                                       |
 | vsnprintf     | as usual, might be wide char strings                                       |
@@ -204,19 +204,20 @@ example `%5D` gives you 5 lines (80 dumped bytes).
 
 Special "device files" you can open:
 
-| Name                | Description                                        |
-|---------------------|----------------------------------------------------|
-| `/dev/stdin`        | returns ST->ConIn                                  |
-| `/dev/stdout`       | returns ST->ConOut, fprintf                        |
-| `/dev/stderr`       | returns ST->StdErr, fprintf                        |
-| `/dev/serial(baud)` | returns Serial IO protocol, fread, fwrite, fprintf |
-| `/dev/disk(n)`      | returns Block IO protocol, fread, fwrite           |
+| Name                | Description                                                          |
+|---------------------|----------------------------------------------------------------------|
+| `/dev/stdin`        | returns ST->ConIn                                                    |
+| `/dev/stdout`       | returns ST->ConOut, fprintf                                          |
+| `/dev/stderr`       | returns ST->StdErr, fprintf                                          |
+| `/dev/serial(baud)` | returns Serial IO protocol, fread, fwrite, fprintf                   |
+| `/dev/disk(n)`      | returns Block IO protocol, fseek, ftell, fread, fwrite, feof         |
 
-With disk devices, `fread` and `fwrite` arguments look like this (because UEFI can't handle position internally), and returned
-size is rounded to block size:
+With Block IO, fseek and buffer size for fread and fwrite is always truncated to the media's block size. So fseek(513)
+for example will seek to 512 with standard block sizes, and 0 with large 4096 block sizes. To detect the media's block
+size, use fstat.
 ```c
-size_t fread(ptr, buffer size, lba number, stream);
-size_t fwrite(ptr, buffer size, lba number, stream);
+if(!fstat(f, &st))
+    block_size = st.st_size / st.st_blocks;
 ```
 To interpret a GPT, there are typedefs like `efi_partition_table_header_t` and `efi_partition_entry_t` which you can point
 to the read data.
@@ -256,6 +257,8 @@ to the read data.
 | mkdir         | as usual, but might accept wide char strings, and mode unused              |
 
 Because UEFI has no concept of device major and minor number nor of inodes, struct stat's fields are limited.
+For Block IO S_IFBLK is returned, for Serial IO, S_IFCHR. The actual implementation of `fstat` is in stdio.c,
+because it needs to access static variables defined there.
 
 ### time.h
 
