@@ -212,10 +212,11 @@ Special "device files" you can open:
 | `/dev/serial(baud)` | returns Serial IO protocol, fread, fwrite, fprintf |
 | `/dev/disk(n)`      | returns Block IO protocol, fread, fwrite           |
 
-With disk devices, `fread` and `fwrite` arguments look like this (because UEFI can't handle position internally):
+With disk devices, `fread` and `fwrite` arguments look like this (because UEFI can't handle position internally), and returned
+size is rounded to block size:
 ```c
-nrblocks fread(ptr, buffer size, lba number, stream);
-nrblocks fwrite(ptr, buffer size, lba number, stream);
+size_t fread(ptr, buffer size, lba number, stream);
+size_t fwrite(ptr, buffer size, lba number, stream);
 ```
 To interpret a GPT, there are typedefs like `efi_partition_table_header_t` and `efi_partition_entry_t` which you can point
 to the read data.
