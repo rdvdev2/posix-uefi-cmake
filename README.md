@@ -113,8 +113,9 @@ and the `USE_UTF8` define to convert between `char` and `wchar_t` transparently.
 example your main() will NOT be like `main(int argc, char **argv)`, but `main(int argc, wchar_t **argv)` instead. All
 the other string related libc functions (like strlen() for example) will use this wide character type too. For this reason,
 you must specify your string literals with `L""` and characters with `L''`. To handle both configurations, `char_t` type is
-defined, which is either `char` or `wchar_t`. Functions that supposed to handle characters in int type (like `getchar`,
-`putchar`), do not truncate to unsigned char, rather to wchar_t.
+defined, which is either `char` or `wchar_t`, and the `CL()` macro which might add the `L` prefix to constant literals.
+Functions that supposed to handle characters in int type (like `getchar`, `putchar`), do not truncate to unsigned char,
+rather to wchar_t.
 
 File types in dirent are limited to directories and files only (DT_DIR, DT_REG), but for stat in addition to S_IFDIR and
 S_IFREG, S_IFIFO also returned (for console streams: stdin, stdout, stderr).
