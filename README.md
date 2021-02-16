@@ -63,7 +63,7 @@ used to create a shared object and get converted into an .efi file.
 
 If you comment out `USE_UTF8` in uefi.h, then all character representation will use `wchar_t`, and there will be no string
 conversion between your application and the UEFI interfaces. This also means you must use `L""` and `L''` literals everywhere,
-and you main would receive `wchar_t **argv`.
+and your main would receive `wchar_t **argv`.
 
 ### Available Makefile Options
 
@@ -272,10 +272,10 @@ The actual implementation of `fstat` is in stdio.c, because it needs to access s
 
 | Function      | Description                                                                |
 |---------------|----------------------------------------------------------------------------|
-| usleep        | the usual                                                                  |
-| sleep         | the usual                                                                  |
-| unlink        | as usual, but accepts wide char strings                                    |
-| rmdir         | as usual, but accepts wide char strings                                    |
+| usleep        | as usual (uses BS->Stall)                                                  |
+| sleep         | as usual                                                                   |
+| unlink        | as usual, but might accept wide char strings                               |
+| rmdir         | as usual, but might accept wide char strings                               |
 
 Accessing UEFI Services
 -----------------------
@@ -285,9 +285,9 @@ in `uefi.h`:
 
 | Global Variable | Description                                              |
 |-----------------|----------------------------------------------------------|
-| `*BS`           | *efi_boot_services_t*, pointer to the Boot Time Services |
-| `*RT`           | *efi_runtime_t*, pointer to the Runtime Services         |
-| `*ST`           | *efi_system_table_t*, pointer to the UEFI System Table   |
+| `*BS`, `gBS`    | *efi_boot_services_t*, pointer to the Boot Time Services |
+| `*RT`, `gRT`    | *efi_runtime_t*, pointer to the Runtime Services         |
+| `*ST`, `gST`    | *efi_system_table_t*, pointer to the UEFI System Table   |
 | `IM`            | *efi_handle_t* of your Loaded Image                      |
 
 The EFI structures, enums, typedefs and defines are all converted to ANSI C standard POSIX style, for example
