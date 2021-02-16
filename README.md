@@ -52,14 +52,26 @@ An example **helloworld.c** goes like this:
 ```c
 #include <uefi.h>
 
+int main(int argc, char **argv)
+{
+    printf("Hello World!\n");
+    return 0;
+}
+```
+By default it uses Clang + lld, and PE is generated without conversion. If `USE_GCC` is set, then the host native's GNU gcc + ld
+used to create a shared object and get converted into an .efi file.
+
+If you comment out `USE_UTF8` in uefi.h, then all character representation will use `wchar_t`, and there will be no string
+conversion between your application and the UEFI interfaces. This also means you must use `L""` and `L''` literals everywhere:
+```c
+#include <uefi.h>
+
 int main(int argc, wchar_t **argv)
 {
     printf(L"Hello World!\n");
     return 0;
 }
 ```
-By default it uses Clang + lld, and PE is generated without conversion. If `USE_GCC` is set, then the host native's GNU gcc + ld
-used to create a shared object and get converted into an .efi file.
 
 ### Available Makefile Options
 
@@ -97,10 +109,12 @@ for you, because simplicity was one of its main goals. It is the best to say thi
 rather than a POSIX compatible libc.
 
 All strings in the UEFI environment are stored with 16 bits wide characters. The library provides `wchar_t` type for that,
-so for example your main() is NOT like `main(int argc, char **argv)`, but `main(int argc, wchar_t **argv)` instead. All
-the other string related libc functions (like strlen() for example) use this wide character type too. For this reason, you
-must specify your string literals with `L""` and characters with `L''`. Functions that supposed to handle characters in int
-type (like `getchar`, `putchar`), do not truncate to unsigned char, rather to wchar_t.
+and the `USE_UTF8` define to convert between `char` and `wchar_t` transparently. If you comment out `USE_UTF8`, then for
+example your main() will NOT be like `main(int argc, char **argv)`, but `main(int argc, wchar_t **argv)` instead. All
+the other string related libc functions (like strlen() for example) will use this wide character type too. For this reason,
+you must specify your string literals with `L""` and characters with `L''`. To handle both configurations, `char_t` type is
+defined, which is either `char` or `wchar_t`. Functions that supposed to handle characters in int type (like `getchar`,
+`putchar`), do not truncate to unsigned char, rather to wchar_t.
 
 File types in dirent are limited to directories and files only (DT_DIR, DT_REG), but for stat in addition to S_IFDIR and
 S_IFREG, S_IFIFO also returned (for console streams: stdin, stdout, stderr).
@@ -116,7 +130,7 @@ List of Provided POSIX Functions
 
 | Function      | Description                                                                |
 |---------------|----------------------------------------------------------------------------|
-| opendir       | as usual, but accepts wide char strings                                    |
+| opendir       | as usual, but might accept wide char strings                               |
 | readdir       | as usual                                                                   |
 | rewinddir     | as usual                                                                   |
 | closedir      | as usual                                                                   |
@@ -127,15 +141,16 @@ Because UEFI has no concept of device files nor of symlinks, dirent fields are l
 
 | Function      | Description                                                                |
 |---------------|----------------------------------------------------------------------------|
-| atoi          | as usual, but accepts wide char strings and understands "0x" prefix        |
-| atol          | as usual, but accepts wide char strings and understands "0x" prefix        |
-| strtol        | as usual, but accepts wide char strings                                    |
+| atoi          | as usual, but might accept wide char strings and understands "0x" prefix   |
+| atol          | as usual, but might accept wide char strings and understands "0x" prefix   |
+| strtol        | as usual, but might accept wide char strings                               |
 | malloc        | as usual                                                                   |
 | calloc        | as usual                                                                   |
 | realloc       | as usual (needs testing)                                                   |
 | free          | as usual                                                                   |
 | abort         | as usual                                                                   |
 | exit          | as usual                                                                   |
+| exit_bs       | leave this entire UEFI bullshit behind (exit Boot Services)                |
 | mbtowc        | as usual (UTF-8 char to wchar_t)                                           |
 | wctomb        | as usual (wchar_t to UTF-8 char)                                           |
 | mbstowcs      | as usual (UTF-8 string to wchar_t string)                                  |
@@ -146,12 +161,17 @@ Because UEFI has no concept of device files nor of symlinks, dirent fields are l
 | setenv        | pretty UEFI specific                                                       |
 
 ```c
-uint8_t *getenv(wchar_t *name, uintn_t *len);
+int exit_bs()
+```
+Exit Boot Services. Returns 0 on success.
+
+```c
+uint8_t *getenv(char_t *name, uintn_t *len);
 ```
 Query the value of environment variable `name`. On success, `len` is set, and a malloc'd buffer returned. It is
 the caller's responsibility to free the buffer later. On error returns NULL.
 ```c
-int setenv(wchar_t *name, uintn_t len, uint8_t *data);
+int setenv(char_t *name, uintn_t len, uint8_t *data);
 ```
 Sets an environment variable by `name` with `data` of length `len`. On success returns 1, otherwise 0 on error.
 
@@ -159,7 +179,7 @@ Sets an environment variable by `name` with `data` of length `len`. On success r
 
 | Function      | Description                                                                |
 |---------------|----------------------------------------------------------------------------|
-| fopen         | as usual, but accepts wide char strings, also for mode                     |
+| fopen         | as usual, but might accept wide char strings, also for mode                |
 | fclose        | as usual                                                                   |
 | fflush        | as usual                                                                   |
 | fread         | as usual, only real files accepted (no stdin)                              |
@@ -167,33 +187,27 @@ Sets an environment variable by `name` with `data` of length `len`. On success r
 | fseek         | as usual, only real files accepted (no stdin, stdout, stderr)              |
 | ftell         | as usual, only real files accepted (no stdin, stdout, stderr)              |
 | feof          | as usual, only real files accepted (no stdin, stdout, stderr)              |
-| fprintf       | as usual, but accepts wide char strings, max BUFSIZ, files, stdout, stderr |
-| printf        | as usual, but accepts wide char strings, max BUFSIZ, stdout only           |
-| sprintf       | as usual, but accepts wide char strings, max BUFSIZ                        |
-| vfprintf      | as usual, but accepts wide char strings, max BUFSIZ, files, stdout, stderr |
-| vprintf       | as usual, but accepts wide char strings, max BUFSIZ                        |
-| vsprintf      | as usual, but accepts wide char strings, max BUFSIZ                        |
-| snprintf      | as usual, but accepts wide char strings                                    |
-| vsnprintf     | as usual, but accepts wide char strings                                    |
-| getchar       | as usual, waits for a key, blocking, stdin only (no redirects)             |
+| fprintf       | as usual, might be wide char strings, max BUFSIZ, files, stdout, stderr    |
+| printf        | as usual, might be wide char strings, max BUFSIZ, stdout only              |
+| sprintf       | as usual, might be wide char strings, max BUFSIZ                           |
+| vfprintf      | as usual, might be wide char strings, max BUFSIZ, files, stdout, stderr    |
+| vprintf       | as usual, might be wide char strings, max BUFSIZ                           |
+| vsprintf      | as usual, might be wide char strings, max BUFSIZ                           |
+| snprintf      | as usual, might be wide char strings                                       |
+| vsnprintf     | as usual, might be wide char strings                                       |
+| getchar       | as usual, blocking, stdin only (no stream redirects), returns UNICODE      |
 | getchar_ifany | non-blocking, returns 0 if there was no key press, UNICODE otherwise       |
-| putchar       | as usual, stdout only (no redirects)                                       |
-| exit_bs       | leave this entire UEFI bullshit behind (exit Boot Services)                |
+| putchar       | as usual, stdout only (no stream redirects)                                |
 
-```c
-int exit_bs()
-```
-Exit Boot Services. Returns 0 on success.
-
-File open modes: `L"r"` read, `L"w"` write, `L"a"` append. Because of UEFI peculiarities, `L"wd"` creates directory.
+File open modes: `"r"` read, `"w"` write, `"a"` append. Because of UEFI peculiarities, `"wd"` creates directory.
 
 String formating is limited; only supports padding via number prefixes, `%d`, `%x`, `%X`, `%c`, `%s`, `%q` and
-`%p`. Because it operates on wchar_t, it also supports the non-standard `%C` (printing an UTF-8 character, needs
-char\*), `%S` (printing an UTF-8 string), `%Q` (printing an escaped UTF-8 string). These functions don't allocate
-memory, but in return the total length of the output string cannot be longer than BUFSIZ (8k if you haven't
-defined otherwise), except for the variants which have a maxlen argument. For convenience, `%D` requires
-`efi_physical_address_t` as argument, and it dumps memory, 16 bytes or one line at once. With the padding
-modifier you can dump more lines, for example `%5D` gives you 5 lines (80 dumped bytes).
+`%p`. When `USE_UTF8` is not defined, then formating operates on wchar_t, so it also supports the non-standard `%S`
+(printing an UTF-8 string), `%Q` (printing an escaped UTF-8 string). These functions don't allocate memory, but in
+return the total length of the output string cannot be longer than `BUFSIZ` (8k if you haven't defined otherwise),
+except for the variants which have a maxlen argument. For convenience, `%D` requires `efi_physical_address_t` as
+argument, and it dumps memory, 16 bytes or one line at once. With the padding modifier you can dump more lines, for
+example `%5D` gives you 5 lines (80 dumped bytes).
 
 Special "device files" you can open:
 
@@ -219,27 +233,27 @@ With disk devices, `fread` and `fwrite` arguments look like this: fread(ptr, buf
 | memrchr       | as usual, works on bytes                                                   |
 | memmem        | as usual, works on bytes                                                   |
 | memrmem       | as usual, works on bytes                                                   |
-| strcpy        | works on wide char strings                                                 |
-| strncpy       | works on wide char strings                                                 |
-| strcat        | works on wide char strings                                                 |
-| strncat       | works on wide char strings                                                 |
-| strcmp        | works on wide char strings                                                 |
-| strncmp       | works on wide char strings                                                 |
-| strdup        | works on wide char strings                                                 |
-| strchr        | works on wide char strings                                                 |
-| strrchr       | works on wide char strings                                                 |
-| strstr        | works on wide char strings                                                 |
-| strtok        | works on wide char strings                                                 |
-| strtok_r      | works on wide char strings                                                 |
-| strlen        | works on wide char strings                                                 |
+| strcpy        | might work on wide char strings                                            |
+| strncpy       | might work on wide char strings                                            |
+| strcat        | might work on wide char strings                                            |
+| strncat       | might work on wide char strings                                            |
+| strcmp        | might work on wide char strings                                            |
+| strncmp       | might work on wide char strings                                            |
+| strdup        | might work on wide char strings                                            |
+| strchr        | might work on wide char strings                                            |
+| strrchr       | might work on wide char strings                                            |
+| strstr        | might work on wide char strings                                            |
+| strtok        | might work on wide char strings                                            |
+| strtok_r      | might work on wide char strings                                            |
+| strlen        | might work on wide char strings                                            |
 
 ### sys/stat.h
 
 | Function      | Description                                                                |
 |---------------|----------------------------------------------------------------------------|
-| stat          | as usual, but accepts wide char strings                                    |
+| stat          | as usual, but might accept wide char strings                               |
 | fstat         | UEFI doesn't have fd, so it uses FILE\*                                    |
-| mkdir         | as usual, but accepts wide char strings, and mode unused                   |
+| mkdir         | as usual, but might accept wide char strings, and mode unused              |
 
 Because UEFI has no concept of device major and minor number nor of inodes, struct stat's fields are limited.
 

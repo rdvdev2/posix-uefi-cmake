@@ -3,11 +3,11 @@
 /**
  * Classic Hello World example
  */
-int main(int argc, wchar_t **argv)
+int main(int argc, char **argv)
 {
     (void)argc;
     (void)argv;
 
-    printf(L"Hello World!\n");
+    printf("Hello World!\n");
     return 0;
 }

@@ -35,6 +35,9 @@
 extern "C" {
 #endif
 
+/* comment out this if you want to use wchar_t in your application */
+#define USE_UTF8            1
+
 /* get these from the compiler */
 typedef char                int8_t;
 typedef unsigned char       uint8_t;
@@ -75,6 +78,14 @@ typedef uint64_t efi_physical_address_t;
 typedef uint64_t efi_virtual_address_t;
 typedef void     *efi_handle_t;
 typedef void     *efi_event_t;
+#if USE_UTF8
+typedef char    char_t;
+#define CL(a)   a
+extern char *__argvutf8;
+#else
+typedef wchar_t char_t;
+#define CL(a)   L ## a
+#endif
 
 typedef struct {
     uint32_t    Data1;
@@ -1187,10 +1198,10 @@ typedef struct {
 struct dirent {
     unsigned short int d_reclen;
     unsigned char d_type;
-    wchar_t d_name[FILENAME_MAX];
+    char_t d_name[FILENAME_MAX];
 };
 typedef struct efi_file_handle_s DIR;
-extern DIR *opendir (const wchar_t *__name);
+extern DIR *opendir (const char_t *__name);
 extern struct dirent *readdir (DIR *__dirp);
 extern void rewinddir (DIR *__dirp);
 extern int closedir (DIR *__dirp);
@@ -1235,9 +1246,9 @@ extern int errno;
 /* stdlib.h */
 #define RAND_MAX       2147483647
 typedef int (*__compar_fn_t) (const void *, const void *);
-extern int atoi (const wchar_t *__nptr);
-extern int64_t atol (const wchar_t *__nptr);
-extern int64_t strtol (const wchar_t *__nptr, wchar_t **__endptr, int __base);
+extern int atoi (const char_t *__nptr);
+extern int64_t atol (const char_t *__nptr);
+extern int64_t strtol (const char_t *__nptr, char_t **__endptr, int __base);
 extern void *malloc (size_t __size);
 extern void *calloc (size_t __nmemb, size_t __size);
 extern void *realloc (void *__ptr, size_t __size);
@@ -1255,6 +1266,8 @@ extern size_t mbstowcs (wchar_t *__pwcs, const char *__s, size_t __n);
 extern size_t wcstombs (char *__s, const wchar_t *__pwcs, size_t __n);
 extern void srand(unsigned int __seed);
 extern int rand(void);
+extern uint8_t *getenv(char_t *name, uintn_t *len);
+extern int setenv(char_t *name, uintn_t len, uint8_t *data);
 
 /* stdio.h */
 #ifndef BUFSIZ
@@ -1269,27 +1282,25 @@ extern int rand(void);
 typedef struct efi_file_handle_s FILE;
 extern int fclose (FILE *__stream);
 extern int fflush (FILE *__stream);
-extern int remove (const wchar_t *__filename);
-extern FILE *fopen (const wchar_t *__filename, const wchar_t *__modes);
+extern int remove (const char_t *__filename);
+extern FILE *fopen (const char_t *__filename, const char_t *__modes);
 extern size_t fread (void *__ptr, size_t __size, size_t __n, FILE *__stream);
 extern size_t fwrite (const void *__ptr, size_t __size, size_t __n, FILE *__s);
 extern int fseek (FILE *__stream, long int __off, int __whence);
 extern long int ftell (FILE *__stream);
 extern int feof (FILE *__stream);
-extern int fprintf (FILE *__stream, const wchar_t *__format, ...);
-extern int printf (const wchar_t *__format, ...);
-extern int sprintf (wchar_t *__s, const wchar_t *__format, ...);
-extern int vfprintf (FILE *__s, const wchar_t *__format, __builtin_va_list __arg);
-extern int vprintf (const wchar_t *__format, __builtin_va_list __arg);
-extern int vsprintf (wchar_t *__s, const wchar_t *__format, __builtin_va_list __arg);
-extern int snprintf (wchar_t *__s, size_t __maxlen, const wchar_t *__format, ...);
-extern int vsnprintf (wchar_t *__s, size_t __maxlen, const wchar_t *__format, __builtin_va_list __arg);
+extern int fprintf (FILE *__stream, const char_t *__format, ...);
+extern int printf (const char_t *__format, ...);
+extern int sprintf (char_t *__s, const char_t *__format, ...);
+extern int vfprintf (FILE *__s, const char_t *__format, __builtin_va_list __arg);
+extern int vprintf (const char_t *__format, __builtin_va_list __arg);
+extern int vsprintf (char_t *__s, const char_t *__format, __builtin_va_list __arg);
+extern int snprintf (char_t *__s, size_t __maxlen, const char_t *__format, ...);
+extern int vsnprintf (char_t *__s, size_t __maxlen, const char_t *__format, __builtin_va_list __arg);
 extern int getchar (void);
 /* non-blocking, only returns UNICODE if there's any key pressed, 0 otherwise */
 extern int getchar_ifany (void);
 extern int putchar (int __c);
-extern uint8_t *getenv(wchar_t *name, uintn_t *len);
-extern int setenv(wchar_t *name, uintn_t len, uint8_t *data);
 
 /* string.h */
 #ifndef __clang__
@@ -1309,19 +1320,19 @@ extern void *memrchr (const void *__s, int __c, size_t __n);
 #endif
 void *memmem(const void *haystack, size_t hl, const void *needle, size_t nl);
 void *memrmem(const void *haystack, size_t hl, const void *needle, size_t nl);
-extern wchar_t *strcpy (wchar_t *__dest, const wchar_t *__src);
-extern wchar_t *strncpy (wchar_t *__dest, const wchar_t *__src, size_t __n);
-extern wchar_t *strcat (wchar_t *__dest, const wchar_t *__src);
-extern wchar_t *strncat (wchar_t *__dest, const wchar_t *__src, size_t __n);
-extern int strcmp (const wchar_t *__s1, const wchar_t *__s2);
-extern int strncmp (const wchar_t *__s1, const wchar_t *__s2, size_t __n);
-extern wchar_t *strdup (const wchar_t *__s);
-extern wchar_t *strchr (const wchar_t *__s, int __c);
-extern wchar_t *strrchr (const wchar_t *__s, int __c);
-extern wchar_t *strstr (const wchar_t *__haystack, const wchar_t *__needle);
-extern wchar_t *strtok (wchar_t *__s, const wchar_t *__delim);
-extern wchar_t *strtok_r (wchar_t *__s, const wchar_t *__delim, wchar_t **__save_ptr);
-extern size_t strlen (const wchar_t *__s);
+extern char_t *strcpy (char_t *__dest, const char_t *__src);
+extern char_t *strncpy (char_t *__dest, const char_t *__src, size_t __n);
+extern char_t *strcat (char_t *__dest, const char_t *__src);
+extern char_t *strncat (char_t *__dest, const char_t *__src, size_t __n);
+extern int strcmp (const char_t *__s1, const char_t *__s2);
+extern int strncmp (const char_t *__s1, const char_t *__s2, size_t __n);
+extern char_t *strdup (const char_t *__s);
+extern char_t *strchr (const char_t *__s, int __c);
+extern char_t *strrchr (const char_t *__s, int __c);
+extern char_t *strstr (const char_t *__haystack, const char_t *__needle);
+extern char_t *strtok (char_t *__s, const char_t *__delim);
+extern char_t *strtok_r (char_t *__s, const char_t *__delim, char_t **__save_ptr);
+extern size_t strlen (const char_t *__s);
 
 /* sys/stat.h */
 #define S_IREAD    0400 /* Read by owner.  */
@@ -1342,9 +1353,9 @@ struct stat {
     time_t      st_mtime;
     time_t      st_ctime;
 };
-extern int stat (const wchar_t *__file, struct stat *__buf);
+extern int stat (const char_t *__file, struct stat *__buf);
 extern int fstat (FILE *__f, struct stat *__buf);
-extern int mkdir (const wchar_t *__path, mode_t __mode);
+extern int mkdir (const char_t *__path, mode_t __mode);
 
 /* time.h */
 struct tm {

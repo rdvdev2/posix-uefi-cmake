@@ -35,6 +35,19 @@ static efi_serial_io_protocol_t *__ser = NULL;
 static efi_block_io_t **__blk_devs = NULL;
 static uintn_t __blk_ndevs = 0;
 
+void __stdio_cleanup()
+{
+#if USE_UTF8
+    if(__argvutf8)
+        free(__argvutf8);
+#endif
+    if(__blk_devs) {
+        free(__blk_devs);
+        __blk_devs = NULL;
+        __blk_ndevs = 0;
+    }
+}
+
 void __stdio_seterrno(efi_status_t status)
 {
     switch((int)(status & 0xffff)) {
@@ -79,13 +92,13 @@ int fflush (FILE *__stream)
     return !EFI_ERROR(status);
 }
 
-int __remove (const wchar_t *__filename, int isdir)
+int __remove (const char_t *__filename, int isdir)
 {
     efi_status_t status;
     efi_guid_t infGuid = EFI_FILE_INFO_GUID;
     efi_file_info_t info;
     uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t), i;
-    FILE *f = fopen(__filename, L"r");
+    FILE *f = fopen(__filename, CL("r"));
     if(f == stdin || f == stdout || f == stderr || (__ser && f == (FILE*)__ser)) {
         errno = EBADF;
         return 1;
@@ -118,12 +131,12 @@ err:    __stdio_seterrno(status);
     return 0;
 }
 
-int remove (const wchar_t *__filename)
+int remove (const char_t *__filename)
 {
     return __remove(__filename, -1);
 }
 
-FILE *fopen (const wchar_t *__filename, const wchar_t *__modes)
+FILE *fopen (const char_t *__filename, const char_t *__modes)
 {
     FILE *ret;
     efi_status_t status;
@@ -132,25 +145,27 @@ FILE *fopen (const wchar_t *__filename, const wchar_t *__modes)
     efi_guid_t infGuid = EFI_FILE_INFO_GUID;
     efi_file_info_t info;
     uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t), par, i;
-
+#if USE_UTF8
+    wchar_t wcname[BUFSIZ];
+#endif
     if(!__filename || !*__filename || !__modes || !*__modes) {
         errno = EINVAL;
         return NULL;
     }
     /* fake some device names. UEFI has no concept of device files */
-    if(!strcmp(__filename, L"/dev/stdin")) {
-        if(__modes[0] == L'w' || __modes[0] == L'a') { errno = EPERM; return NULL; }
+    if(!strcmp(__filename, CL("/dev/stdin"))) {
+        if(__modes[0] == CL('w') || __modes[0] == CL('a')) { errno = EPERM; return NULL; }
         return stdin;
     }
-    if(!strcmp(__filename, L"/dev/stdout")) {
-        if(__modes[0] == L'r') { errno = EPERM; return NULL; }
+    if(!strcmp(__filename, CL("/dev/stdout"))) {
+        if(__modes[0] == CL('r')) { errno = EPERM; return NULL; }
         return stdout;
     }
-    if(!strcmp(__filename, L"/dev/stderr")) {
-        if(__modes[0] == L'r') { errno = EPERM; return NULL; }
+    if(!strcmp(__filename, CL("/dev/stderr"))) {
+        if(__modes[0] == CL('r')) { errno = EPERM; return NULL; }
         return stderr;
     }
-    if(!memcmp(__filename, L"/dev/serial", 22)) {
+    if(!memcmp(__filename, CL("/dev/serial"), 11 * sizeof(char_t))) {
         par = atol(__filename + 11);
         if(!__ser) {
             efi_guid_t serGuid = EFI_SERIAL_IO_PROTOCOL_GUID;
@@ -160,7 +175,7 @@ FILE *fopen (const wchar_t *__filename, const wchar_t *__modes)
         __ser->SetAttributes(__ser, par > 9600 ? par : 115200, 0, 1000, NoParity, 8, OneStopBit);
         return (FILE*)__ser;
     }
-    if(!memcmp(__filename, L"/dev/disk", 18)) {
+    if(!memcmp(__filename, CL("/dev/disk"), 9 * sizeof(char_t))) {
         par = atol(__filename + 9);
         if(!__blk_ndevs) {
             efi_guid_t bioGuid = EFI_BLOCK_IO_PROTOCOL_GUID;
@@ -202,22 +217,27 @@ FILE *fopen (const wchar_t *__filename, const wchar_t *__modes)
     errno = 0;
     ret = (FILE*)malloc(sizeof(FILE));
     if(!ret) return NULL;
+#if USE_UTF8
+    mbstowcs((wchar_t*)&wcname, __filename, BUFSIZ - 1);
+    status = __root_dir->Open(__root_dir, &ret, (wchar_t*)&wcname,
+#else
     status = __root_dir->Open(__root_dir, &ret, (wchar_t*)__filename,
-        __modes[0] == L'w' ? (EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE) : EFI_FILE_MODE_READ,
-        __modes[1] == L'd' ? EFI_FILE_DIRECTORY : 0);
+#endif
+        __modes[0] == CL('w') ? (EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE) : EFI_FILE_MODE_READ,
+        __modes[1] == CL('d') ? EFI_FILE_DIRECTORY : 0);
     if(EFI_ERROR(status)) {
 err:    __stdio_seterrno(status);
         free(ret); ret = NULL;
     }
     status = ret->GetInfo(ret, &infGuid, &fsiz, &info);
     if(EFI_ERROR(status)) goto err;
-    if(__modes[1] == L'd' && !(info.Attribute & EFI_FILE_DIRECTORY)) {
+    if(__modes[1] == CL('d') && !(info.Attribute & EFI_FILE_DIRECTORY)) {
         free(ret); errno = ENOTDIR; return NULL;
     }
-    if(__modes[1] != L'd' && (info.Attribute & EFI_FILE_DIRECTORY)) {
+    if(__modes[1] != CL('d') && (info.Attribute & EFI_FILE_DIRECTORY)) {
         free(ret); errno = EISDIR; return NULL;
     }
-    if(__modes[0] == L'a') fseek(ret, 0, SEEK_END);
+    if(__modes[0] == CL('a')) fseek(ret, 0, SEEK_END);
     return ret;
 }
 
@@ -377,15 +397,15 @@ err:    __stdio_seterrno(status);
     return info.FileSize == off;
 }
 
-int vsnprintf(wchar_t *dst, size_t maxlen, const wchar_t *fmt, __builtin_va_list args)
+int vsnprintf(char_t *dst, size_t maxlen, const char_t *fmt, __builtin_va_list args)
 {
-#define needsescape(a) (a==L'\"' || a==L'\\' || a==L'\a' || a==L'\b' || a==L'\033' || a=='\f' || \
-    a==L'\r' || a==L'\n' || a==L'\t' || a=='\v')
+#define needsescape(a) (a==CL('\"') || a==CL('\\') || a==CL('\a') || a==CL('\b') || a==CL('\033') || a==CL('\f') || \
+    a==CL('\r') || a==CL('\n') || a==CL('\t') || a==CL('\v'))
     efi_physical_address_t m;
     uint8_t *mem;
     int64_t arg;
     int len, sign, i, j;
-    wchar_t *p, *orig=dst, *end = dst + maxlen - 1, tmpstr[19], pad=' ', n;
+    char_t *p, *orig=dst, *end = dst + maxlen - 1, tmpstr[19], pad=CL(' '), n;
     char *c;
 
     if(dst==NULL || fmt==NULL)
@@ -393,37 +413,30 @@ int vsnprintf(wchar_t *dst, size_t maxlen, const wchar_t *fmt, __builtin_va_list
 
     arg = 0;
     while(*fmt && dst < end) {
-        if(*fmt==L'%') {
+        if(*fmt==CL('%')) {
             fmt++;
-            if(*fmt==L'%') goto put;
+            if(*fmt==CL('%')) goto put;
             len=0;
-            if(*fmt==L'0') pad=L'0';
-            while(*fmt>=L'0' && *fmt<=L'9') {
+            if(*fmt==CL('0')) pad=CL('0');
+            while(*fmt>=CL('0') && *fmt<=CL('9')) {
                 len *= 10;
-                len += *fmt-L'0';
+                len += *fmt-CL('0');
                 fmt++;
             }
-            if(*fmt==L'l') fmt++;
-            if(*fmt==L'c') {
+            if(*fmt==CL('l')) fmt++;
+            if(*fmt==CL('c')) {
                 arg = __builtin_va_arg(args, int);
+#if USE_UTF8
+                if(arg<0x80) { *dst++ = arg; } else
+                if(arg<0x800) { *dst++ = ((arg>>6)&0x1F)|0xC0; *dst++ = (arg&0x3F)|0x80; } else
+                { *dst++ = ((arg>>12)&0x0F)|0xE0; *dst++ = ((arg>>6)&0x3F)|0x80; *dst++ = (arg&0x3F)|0x80; }
+#else
                 *dst++ = (wchar_t)(arg & 0xffff);
+#endif
                 fmt++;
                 continue;
             } else
-            if(*fmt==L'C') {
-                c = __builtin_va_arg(args, char*);
-                arg = *c;
-                if((*c & 128) != 0) {
-                    if((*c & 32) == 0 ) { arg = ((*c & 0x1F)<<6)|(*(c+1) & 0x3F); } else
-                    if((*c & 16) == 0 ) { arg = ((*c & 0xF)<<12)|((*(c+1) & 0x3F)<<6)|(*(c+2) & 0x3F); } else
-                    if((*c & 8) == 0 ) { arg = ((*c & 0x7)<<18)|((*(c+1) & 0x3F)<<12)|((*(c+2) & 0x3F)<<6)|(*(c+3) & 0x3F); }
-                    else arg = L'?';
-                }
-                *dst++ = (wchar_t)(arg & 0xffff);
-                fmt++;
-                continue;
-            } else
-            if(*fmt==L'd') {
+            if(*fmt==CL('d')) {
                 arg = __builtin_va_arg(args, int);
                 sign=0;
                 if((int)arg<0) {
@@ -436,11 +449,11 @@ int vsnprintf(wchar_t *dst, size_t maxlen, const wchar_t *fmt, __builtin_va_list
                 i=18;
                 tmpstr[i]=0;
                 do {
-                    tmpstr[--i]=L'0'+(arg%10);
+                    tmpstr[--i]=CL('0')+(arg%10);
                     arg/=10;
                 } while(arg!=0 && i>0);
                 if(sign) {
-                    tmpstr[--i]=L'-';
+                    tmpstr[--i]=CL('-');
                 }
                 if(len>0 && len<18) {
                     while(i>18-len) {
@@ -450,53 +463,53 @@ int vsnprintf(wchar_t *dst, size_t maxlen, const wchar_t *fmt, __builtin_va_list
                 p=&tmpstr[i];
                 goto copystring;
             } else
-            if(*fmt==L'p' || *fmt==L'P') {
+            if(*fmt==CL('p')) {
                 arg = __builtin_va_arg(args, uint64_t);
-                len = 16; pad = L'0'; goto hex;
+                len = 16; pad = CL('0'); goto hex;
             } else
-            if(*fmt==L'x' || *fmt==L'X' || *fmt==L'p') {
+            if(*fmt==CL('x') || *fmt==CL('X')) {
                 arg = __builtin_va_arg(args, long int);
-                if(*fmt==L'p') { len = 16; pad = L'0'; }
 hex:            i=16;
                 tmpstr[i]=0;
                 do {
                     n=arg & 0xf;
                     /* 0-9 => '0'-'9', 10-15 => 'A'-'F' */
-                    tmpstr[--i]=n+(n>9?(*fmt==L'X'?0x37:0x57):0x30);
+                    tmpstr[--i]=n+(n>9?(*fmt==CL('X')?0x37:0x57):0x30);
                     arg>>=4;
                 } while(arg!=0 && i>0);
                 /* padding, only leading zeros */
                 if(len>0 && len<=16) {
                     while(i>16-len) {
-                        tmpstr[--i]=L'0';
+                        tmpstr[--i]=CL('0');
                     }
                 }
                 p=&tmpstr[i];
                 goto copystring;
             } else
-            if(*fmt==L's' || *fmt==L'q') {
-                p = __builtin_va_arg(args, wchar_t*);
+            if(*fmt==CL('s') || *fmt==CL('q')) {
+                p = __builtin_va_arg(args, char_t*);
 copystring:     if(p==NULL) {
-                    p=L"(null)";
+                    p=CL("(null)");
                 }
                 while(*p && dst + 2 < end) {
-                    if(*fmt==L'q' && needsescape(*p)) {
-                        *dst++ = L'\\';
+                    if(*fmt==CL('q') && needsescape(*p)) {
+                        *dst++ = CL('\\');
                         switch(*p) {
-                            case L'\a': *dst++ = L'a'; break;
-                            case L'\b': *dst++ = L'b'; break;
-                            case L'\e': *dst++ = L'e'; break;
-                            case L'\f': *dst++ = L'f'; break;
-                            case L'\n': *dst++ = L'n'; break;
-                            case L'\r': *dst++ = L'r'; break;
-                            case L'\t': *dst++ = L't'; break;
-                            case L'\v': *dst++ = L'v'; break;
+                            case CL('\a'): *dst++ = CL('a'); break;
+                            case CL('\b'): *dst++ = CL('b'); break;
+                            case CL('\e'): *dst++ = CL('e'); break;
+                            case CL('\f'): *dst++ = CL('f'); break;
+                            case CL('\n'): *dst++ = CL('n'); break;
+                            case CL('\r'): *dst++ = CL('r'); break;
+                            case CL('\t'): *dst++ = CL('t'); break;
+                            case CL('\v'): *dst++ = CL('v'); break;
                             default: *dst++ = *p++; break;
                         }
                     } else
                         *dst++ = *p++;
                 }
             } else
+#if !defined(USE_UTF8) || !USE_UTF8
             if(*fmt==L'S' || *fmt==L'Q') {
                 c = __builtin_va_arg(args, char*);
                 if(c==NULL) goto copystring;
@@ -537,33 +550,34 @@ copystring:     if(p==NULL) {
                     }
                 }
             } else
-            if(*fmt==L'D') {
+#endif
+            if(*fmt==CL('D')) {
                 m = __builtin_va_arg(args, efi_physical_address_t);
                 for(j = 0; j < (len < 1 ? 1 : (len > 16 ? 16 : len)); j++) {
                     for(i = 44; i >= 0; i -= 4) {
                         n = (m >> i) & 15; *dst++ = n + (n>9?0x37:0x30);
                         if(dst >= end) goto zro;
                     }
-                    *dst++ = L':'; if(dst >= end) goto zro;
-                    *dst++ = L' '; if(dst >= end) goto zro;
+                    *dst++ = CL(':'); if(dst >= end) goto zro;
+                    *dst++ = CL(' '); if(dst >= end) goto zro;
                     mem = (uint8_t*)m;
                     for(i = 0; i < 16; i++) {
                         n = (mem[i] >> 4) & 15; *dst++ = n + (n>9?0x37:0x30); if(dst >= end) goto zro;
                         n = mem[i] & 15; *dst++ = n + (n>9?0x37:0x30); if(dst >= end) goto zro;
-                        *dst++ = L' ';if(dst >= end) goto zro;
+                        *dst++ = CL(' ');if(dst >= end) goto zro;
                     }
-                    *dst++ = L' '; if(dst >= end) goto zro;
+                    *dst++ = CL(' '); if(dst >= end) goto zro;
                     for(i = 0; i < 16; i++) {
-                        *dst++ = (mem[i] < 32 || mem[i] >= 127 ? L'.' : mem[i]);
+                        *dst++ = (mem[i] < 32 || mem[i] >= 127 ? CL('.') : mem[i]);
                         if(dst >= end) goto zro;
                     }
-                    *dst++ = L'\r'; if(dst >= end) goto zro;
-                    *dst++ = L'\n'; if(dst >= end) goto zro;
+                    *dst++ = CL('\r'); if(dst >= end) goto zro;
+                    *dst++ = CL('\n'); if(dst >= end) goto zro;
                     m += 16;
                 }
             }
         } else {
-put:        if(*fmt == L'\n') *dst++ = L'\r';
+put:        if(*fmt == CL('\n') && (orig == dst || *(dst - 1) != CL('\r'))) *dst++ = CL('\r');
             *dst++ = *fmt;
         }
         fmt++;
@@ -573,48 +587,59 @@ zro:*dst=0;
 #undef needsescape
 }
 
-int vsprintf(wchar_t *dst, const wchar_t *fmt, __builtin_va_list args)
+int vsprintf(char_t *dst, const char_t *fmt, __builtin_va_list args)
 {
     return vsnprintf(dst, BUFSIZ, fmt, args);
 }
 
-int sprintf(wchar_t *dst, const wchar_t* fmt, ...)
+int sprintf(char_t *dst, const char_t* fmt, ...)
 {
     __builtin_va_list args;
     __builtin_va_start(args, fmt);
     return vsnprintf(dst, BUFSIZ, fmt, args);
 }
 
-int snprintf(wchar_t *dst, size_t maxlen, const wchar_t* fmt, ...)
+int snprintf(char_t *dst, size_t maxlen, const char_t* fmt, ...)
 {
     __builtin_va_list args;
     __builtin_va_start(args, fmt);
     return vsnprintf(dst, maxlen, fmt, args);
 }
 
-int vprintf(const wchar_t* fmt, __builtin_va_list args)
+int vprintf(const char_t* fmt, __builtin_va_list args)
 {
-    wchar_t dst[BUFSIZ];
     int ret;
+    wchar_t dst[BUFSIZ];
+#if USE_UTF8
+    char_t tmp[BUFSIZ];
+    ret = vsnprintf(tmp, sizeof(tmp), fmt, args);
+    mbstowcs(dst, tmp, BUFSIZ - 1);
+#else
     ret = vsnprintf(dst, sizeof(dst), fmt, args);
+#endif
     ST->ConOut->OutputString(ST->ConOut, (wchar_t *)&dst);
     return ret;
 }
 
-int printf(const wchar_t* fmt, ...)
+int printf(const char_t* fmt, ...)
 {
     __builtin_va_list args;
     __builtin_va_start(args, fmt);
     return vprintf(fmt, args);
 }
 
-int vfprintf (FILE *__stream, const wchar_t *__format, __builtin_va_list args)
+int vfprintf (FILE *__stream, const char_t *__format, __builtin_va_list args)
 {
     wchar_t dst[BUFSIZ];
+    char_t tmp[BUFSIZ];
     uintn_t ret, bs, i;
-    if(__stream == stdin) return 0;
+#if USE_UTF8
+    ret = vsnprintf(tmp, sizeof(tmp), __format, args);
+    ret = mbstowcs(dst, tmp, BUFSIZ - 1);
+#else
     ret = vsnprintf(dst, sizeof(dst), __format, args);
-    if(ret < 1) return 0;
+#endif
+    if(ret < 1 || __stream == stdin) return 0;
     for(i = 0; i < __blk_ndevs; i++)
         if(__stream == (FILE*)__blk_devs[i]) {
             errno = EBADF;
@@ -624,14 +649,21 @@ int vfprintf (FILE *__stream, const wchar_t *__format, __builtin_va_list args)
         ST->ConOut->OutputString(ST->ConOut, (wchar_t*)&dst);
     else if(__stream == stderr)
         ST->StdErr->OutputString(ST->StdErr, (wchar_t*)&dst);
-    else if(__ser && __stream == (FILE*)__ser)
-        __ser->Write(__ser, &ret, (void*)&dst);
-    else
+    else if(__ser && __stream == (FILE*)__ser) {
+#if !defined(USE_UTF8) || !USE_UTF8
+        wcstombs((char*)&tmp, dst, BUFSIZ - 1);
+#endif
+        __ser->Write(__ser, &ret, (void*)&tmp);
+    } else
+#if USE_UTF8
+        __stream->Write(__stream, &ret, (void*)&tmp);
+#else
         __stream->Write(__stream, &ret, (void*)&dst);
+#endif
     return ret;
 }
 
-int fprintf (FILE *__stream, const wchar_t *__format, ...)
+int fprintf (FILE *__stream, const char_t *__format, ...)
 {
     __builtin_va_list args;
     __builtin_va_start(args, __format);
@@ -664,23 +696,4 @@ int putchar (int __c)
     tmp[1] = 0;
     ST->ConOut->OutputString(ST->ConOut, (__c == L'\n' ? (wchar_t*)L"\r\n" : (wchar_t*)&tmp));
     return (int)tmp[0];
-}
-
-int exit_bs()
-{
-    efi_status_t status;
-    efi_memory_descriptor_t *memory_map = NULL;
-    uintn_t cnt = 3, memory_map_size=0, map_key=0, desc_size=0, i;
-    if(__blk_devs) {
-        free(__blk_devs);
-        __blk_devs = NULL;
-        __blk_ndevs = 0;
-    }
-    while(cnt--) {
-        status = BS->GetMemoryMap(&memory_map_size, memory_map, &map_key, &desc_size, NULL);
-        if (status!=EFI_BUFFER_TOO_SMALL) break;
-        status = BS->ExitBootServices(IM, map_key);
-        if(!EFI_ERROR(status)) return 0;
-    }
-    return (int)(status & 0xffff);
 }

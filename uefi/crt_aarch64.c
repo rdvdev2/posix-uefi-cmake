@@ -31,7 +31,7 @@
 #include <uefi.h>
 
 /* this is implemented by the application */
-extern int main(int argc, wchar_t **argv);
+extern int main(int argc, char_t **argv);
 
 /* definitions for elf relocations */
 typedef uint64_t Elf64_Xword;
@@ -64,6 +64,9 @@ efi_system_table_t *ST = NULL;
 efi_boot_services_t *BS = NULL;
 efi_runtime_services_t *RT = NULL;
 efi_loaded_image_protocol_t *LIP = NULL;
+#if USE_UTF8
+char *__argvutf8 = NULL;
+#endif
 
 /* we only need one .o file, so use inline Assembly here */
 void bootstrap()
@@ -153,10 +156,13 @@ int uefi_init (
     efi_shell_interface_protocol_t *shi = NULL;
     efi_guid_t lipGuid = EFI_LOADED_IMAGE_PROTOCOL_GUID;
     efi_status_t status;
-    int argc = 0;
+    int argc = 0, i;
     wchar_t **argv = NULL;
+#if USE_UTF8
+    int ret, j;
+    char *s;
+#endif
 #ifndef __clang__
-    int i;
     long relsz = 0, relent = 0;
     Elf64_Rel *rel = 0;
     uintptr_t *addr;
@@ -177,6 +183,8 @@ int uefi_init (
             relsz -= relent;
         }
     }
+#else
+    (void)i;
 #endif
     /* save EFI pointers and loaded image into globals */
     IM = image;
@@ -193,5 +201,32 @@ int uefi_init (
         if(!EFI_ERROR(status) && shi) { argc = shi->Argc; argv = shi->Argv; }
     }
     /* call main */
+#if USE_UTF8
+    if(argc && argv) {
+        ret = (argc + 1) * (sizeof(uintptr_t) + 1);
+        for(i = 0; i < argc; i++)
+            for(j = 0; argv[i] && argv[i][j]; j++)
+                ret += argv[i][j] < 0x80 ? 1 : (argv[i][j] < 0x800 ? 2 : 3);
+        status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, ret, (void **)&__argvutf8);
+        if(EFI_ERROR(status) || !__argvutf8) { argc = 0; __argvutf8 = NULL; }
+        else {
+            s = __argvutf8 + argc * sizeof(uintptr_t);
+            *((uintptr_t*)s) = (uintptr_t)0; s += sizeof(uintptr_t);
+            for(i = 0; i < argc; i++) {
+                *((uintptr_t*)(__argvutf8 + i * sizeof(uintptr_t))) = (uintptr_t)s;
+                for(j = 0; argv[i] && argv[i][j]; j++) {
+                    if(argv[i][j]<0x80) { *s++ = argv[i][j]; } else
+                    if(argv[i][j]<0x800) { *s++ = ((argv[i][j]>>6)&0x1F)|0xC0; *s++ = (argv[i][j]&0x3F)|0x80; } else
+                    { *s++ = ((argv[i][j]>>12)&0x0F)|0xE0; *s++ = ((argv[i][j]>>6)&0x3F)|0x80; *s++ = (argv[i][j]&0x3F)|0x80; }
+                }
+                *s++ = 0;
+            }
+        }
+    }
+    ret = main(argc, (char**)__argvutf8);
+    if(__argvutf8) BS->FreePool(__argvutf8);
+    return ret;
+#else
     return main(argc, argv);
+#endif
 }

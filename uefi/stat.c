@@ -70,7 +70,7 @@ int fstat (FILE *__f, struct stat *__buf)
     return 0;
 }
 
-int stat (const wchar_t *__file, struct stat *__buf)
+int stat (const char_t *__file, struct stat *__buf)
 {
     int ret;
     FILE *f;
@@ -79,7 +79,7 @@ int stat (const wchar_t *__file, struct stat *__buf)
         errno = EINVAL;
         return -1;
     }
-    f = fopen(__file, L"*");
+    f = fopen(__file, CL("*"));
     if(!f) {
         memset(__buf, 0, sizeof(struct stat));
         return -1;
@@ -89,7 +89,7 @@ int stat (const wchar_t *__file, struct stat *__buf)
     return ret;
 }
 
-extern int mkdir (const wchar_t *__path, mode_t __mode)
+extern int mkdir (const char_t *__path, mode_t __mode)
 {
     FILE *f;
     (void)__mode;
@@ -97,7 +97,7 @@ extern int mkdir (const wchar_t *__path, mode_t __mode)
         errno = EINVAL;
         return -1;
     }
-    f = fopen(__path, L"wd");
+    f = fopen(__path, CL("wd"));
     if(!f) {
         return -1;
     }

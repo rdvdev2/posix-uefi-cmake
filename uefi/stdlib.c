@@ -32,43 +32,44 @@
 
 int errno = 0;
 static uint64_t __srand_seed = 6364136223846793005ULL;
+extern void __stdio_cleanup();
 
-int atoi(const wchar_t *s)
+int atoi(const char_t *s)
 {
     return (int)atol(s);
 }
 
-int64_t atol(const wchar_t *s)
+int64_t atol(const char_t *s)
 {
     int64_t sign = 1;
     if(!s || !*s) return 0;
-    if(*s == L'-') { sign = -1; s++; }
-    if(s[0] == L'0') {
-        if(s[1] == L'x')
-            return strtol(s + 2, NULL, 16);
-        if(s[1] >= L'0' && s[1] <= L'7')
-            return strtol(s, NULL, 8);
+    if(*s == CL('-')) { sign = -1; s++; }
+    if(s[0] == CL('0')) {
+        if(s[1] == CL('x'))
+            return strtol(s + 2, NULL, 16) * sign;
+        if(s[1] >= CL('0') && s[1] <= CL('7'))
+            return strtol(s, NULL, 8) * sign;
     }
     return strtol(s, NULL, 10) * sign;
 }
 
-int64_t strtol (const wchar_t *s, wchar_t **__endptr, int __base)
+int64_t strtol (const char_t *s, char_t **__endptr, int __base)
 {
     int64_t v=0, sign = 1;
     if(!s || !*s) return 0;
-    if(*s == L'-') { sign = -1; s++; }
-    while(!(*s < L'0' || (__base < 10 && *s >= __base + L'0') || (__base >= 10 && ((*s > L'9' && *s < L'A') ||
-            (*s > L'F' && *s < L'a') || *s > L'f')))) {
+    if(*s == CL('-')) { sign = -1; s++; }
+    while(!(*s < CL('0') || (__base < 10 && *s >= __base + CL('0')) || (__base >= 10 && ((*s > CL('9') && *s < CL('A')) ||
+            (*s > CL('F') && *s < CL('a')) || *s > CL('f'))))) {
         v *= __base;
-        if(*s >= L'0' && *s <= (__base < 10 ? __base + L'0' : L'9'))
-            v += (*s)-L'0';
-        else if(__base == 16 && *s >= L'a' && *s <= L'f')
-            v += (*s)-L'a'+10;
-        else if(__base == 16 && *s >= L'A' && *s <= L'F')
-            v += (*s)-L'A'+10;
+        if(*s >= CL('0') && *s <= (__base < 10 ? __base + CL('0') : CL('9')))
+            v += (*s)-CL('0');
+        else if(__base == 16 && *s >= CL('a') && *s <= CL('f'))
+            v += (*s)-CL('a')+10;
+        else if(__base == 16 && *s >= CL('A') && *s <= CL('F'))
+            v += (*s)-CL('A')+10;
         s++;
     };
-    if(__endptr) *__endptr = (wchar_t*)s;
+    if(__endptr) *__endptr = (char_t*)s;
     return v * sign;
 }
 
@@ -112,12 +113,29 @@ void free (void *__ptr)
 
 void abort ()
 {
+    __stdio_cleanup();
     BS->Exit(IM, EFI_ABORTED, 0, NULL);
 }
 
 void exit (int __status)
 {
+    __stdio_cleanup();
     BS->Exit(IM, !__status ? 0 : (__status < 0 ? EFIERR(-__status) : EFIERR(__status)), 0, NULL);
+}
+
+int exit_bs()
+{
+    efi_status_t status;
+    efi_memory_descriptor_t *memory_map = NULL;
+    uintn_t cnt = 3, memory_map_size=0, map_key=0, desc_size=0, i;
+    __stdio_cleanup();
+    while(cnt--) {
+        status = BS->GetMemoryMap(&memory_map_size, memory_map, &map_key, &desc_size, NULL);
+        if (status!=EFI_BUFFER_TOO_SMALL) break;
+        status = BS->ExitBootServices(IM, map_key);
+        if(!EFI_ERROR(status)) return 0;
+    }
+    return (int)(status & 0xffff);
 }
 
 void *bsearch(const void *key, const void *base, size_t nmemb, size_t size, __compar_fn_t cmp)
@@ -156,15 +174,17 @@ int mbtowc (wchar_t * __pwc, const char *s, size_t n)
 {
     wchar_t arg;
     const char *orig = s;
+    int ret = 1;
+    if(!s || !*s) return 0;
     arg = (wchar_t)*s;
     if((*s & 128) != 0) {
-        if((*s & 32) == 0 && n > 0) { arg = ((*s & 0x1F)<<6)|(*(s+1) & 0x3F); } else
-        if((*s & 16) == 0 && n > 1) { arg = ((*s & 0xF)<<12)|((*(s+1) & 0x3F)<<6)|(*(s+2) & 0x3F); } else
-        if((*s & 8) == 0 && n > 2) { arg = ((*s & 0x7)<<18)|((*(s+1) & 0x3F)<<12)|((*(s+2) & 0x3F)<<6)|(*(s+3) & 0x3F); }
+        if((*s & 32) == 0 && n > 0) { arg = ((*s & 0x1F)<<6)|(*(s+1) & 0x3F); ret = 2; } else
+        if((*s & 16) == 0 && n > 1) { arg = ((*s & 0xF)<<12)|((*(s+1) & 0x3F)<<6)|(*(s+2) & 0x3F); ret = 3; } else
+        if((*s & 8) == 0 && n > 2) { arg = ((*s & 0x7)<<18)|((*(s+1) & 0x3F)<<12)|((*(s+2) & 0x3F)<<6)|(*(s+3) & 0x3F); ret = 4; }
         else return -1;
     }
     if(__pwc) *__pwc = arg;
-    return s - orig;
+    return ret;
 }
 
 int wctomb (char *s, wchar_t u)
@@ -190,14 +210,14 @@ size_t mbstowcs (wchar_t *__pwcs, const char *__s, size_t __n)
 {
     int r;
     wchar_t *orig = __pwcs;
-    size_t ret = 0;
     if(!__s || !*__s) return 0;
     while(*__s) {
-        r = mbtowc(__pwcs, __s, __n - ret);
+        r = mbtowc(__pwcs, __s, __n - (__pwcs - orig));
         if(r < 0) return (size_t)-1;
         __pwcs++;
         __s += r;
-    };
+    }
+    *__pwcs = 0;
     return __pwcs - orig;
 }
 
@@ -206,12 +226,13 @@ size_t wcstombs (char *__s, const wchar_t *__pwcs, size_t __n)
     int r;
     char *orig = __s;
     if(!__s || !__pwcs || !*__pwcs) return 0;
-    while(*__pwcs && (__s - orig + 3 < __n)) {
+    while(*__pwcs && (__s - orig + 4 < __n)) {
         r = wctomb(__s, *__pwcs);
         if(r < 0) return (size_t)-1;
         __pwcs++;
         __s += r;
-    };
+    }
+    *__s = 0;
     return __s - orig;
 }
 
@@ -235,12 +256,19 @@ int rand()
     return ret;
 }
 
-uint8_t *getenv(wchar_t *name, uintn_t *len)
+uint8_t *getenv(char_t *name, uintn_t *len)
 {
     efi_guid_t globGuid = EFI_GLOBAL_VARIABLE;
     uint8_t tmp[EFI_MAXIMUM_VARIABLE_SIZE], *ret;
     uint32_t attr;
-    efi_status_t status = RT->GetVariable(name, &globGuid, &attr, len, &tmp);
+    efi_status_t status;
+#if USE_UTF8
+    wchar_t wcname[256];
+    mbstowcs((wchar_t*)&wcname, name, 256);
+    status = RT->GetVariable((wchar_t*)&wcname, &globGuid, &attr, len, &tmp);
+#else
+    status = RT->GetVariable(name, &globGuid, &attr, len, &tmp);
+#endif
     if(EFI_ERROR(status) || *len < 1 || !(ret = malloc((*len) + 1))) {
         *len = 0;
         return NULL;
@@ -250,9 +278,16 @@ uint8_t *getenv(wchar_t *name, uintn_t *len)
     return ret;
 }
 
-int setenv(wchar_t *name, uintn_t len, uint8_t *data)
+int setenv(char_t *name, uintn_t len, uint8_t *data)
 {
     efi_guid_t globGuid = EFI_GLOBAL_VARIABLE;
-    efi_status_t status = RT->SetVariable(name, &globGuid, 0, len, data);
+    efi_status_t status;
+#if USE_UTF8
+    wchar_t wcname[256];
+    mbstowcs((wchar_t*)&wcname, name, 256);
+    status = RT->SetVariable(wcname, &globGuid, 0, len, data);
+#else
+    status = RT->SetVariable(name, &globGuid, 0, len, data);
+#endif
     return !EFI_ERROR(status);
 }
