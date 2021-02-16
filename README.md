@@ -110,7 +110,8 @@ Functions that supposed to handle characters in int type (like `getchar`, `putch
 rather to wchar_t.
 
 File types in dirent are limited to directories and files only (DT_DIR, DT_REG), but for stat in addition to S_IFDIR and
-S_IFREG, S_IFIFO also returned (for console streams: stdin, stdout, stderr).
+S_IFREG, S_IFIFO (for console streams: stdin, stdout, stderr), S_IFBLK (for Block IO) and S_IFCHR (for Serial IO) also
+returned.
 
 Note that `getenv` and `setenv` aren't POSIX standard, because UEFI environment variables are binary blobs.
 
@@ -257,8 +258,7 @@ to the read data.
 | mkdir         | as usual, but might accept wide char strings, and mode unused              |
 
 Because UEFI has no concept of device major and minor number nor of inodes, struct stat's fields are limited.
-For Block IO S_IFBLK is returned, for Serial IO, S_IFCHR. The actual implementation of `fstat` is in stdio.c,
-because it needs to access static variables defined there.
+The actual implementation of `fstat` is in stdio.c, because it needs to access static variables defined there.
 
 ### time.h
 
