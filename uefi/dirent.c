@@ -36,7 +36,7 @@ struct dirent __dirent;
 DIR *opendir (const char_t *__name)
 {
     DIR *dp = (DIR*)fopen(__name, CL("rd"));
-    rewinddir(dp);
+    if(dp) rewinddir(dp);
     return dp;
 }
 
@@ -44,7 +44,7 @@ struct dirent *readdir (DIR *__dirp)
 {
     efi_status_t status;
     efi_file_info_t info;
-    uintn_t bs;
+    uintn_t bs = sizeof(efi_file_info_t);
     memset(&__dirent, 0, sizeof(struct dirent));
     status = __dirp->Read(__dirp, &bs, &info);
     if(EFI_ERROR(status) || !bs) {

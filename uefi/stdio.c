@@ -82,7 +82,7 @@ int fstat (FILE *__f, struct stat *__buf)
         __buf->st_mode = S_IWRITE | S_IFIFO;
         return 0;
     }
-    if(__f == (FILE*)__ser) {
+    if(__ser && __f == (FILE*)__ser) {
         __buf->st_mode = S_IREAD | S_IWRITE | S_IFCHR;
         return 0;
     }
@@ -226,14 +226,10 @@ FILE *fopen (const char_t *__filename, const char_t *__modes)
         par = atol(__filename + 9);
         if(!__blk_ndevs) {
             efi_guid_t bioGuid = EFI_BLOCK_IO_PROTOCOL_GUID;
-            efi_handle_t *handles = NULL;
-            uintn_t handle_size = 0;
-            do {
-                handle_size += 16;
-                handles = realloc(handles, handle_size);
-                status = BS->LocateHandle(ByProtocol, &bioGuid, NULL, handle_size, handles);
-            } while(status == EFI_BUFFER_TOO_SMALL);
-            if(!EFI_ERROR(status) && handles) {
+            efi_handle_t handles[128];
+            uintn_t handle_size = sizeof(handles);
+            status = BS->LocateHandle(ByProtocol, &bioGuid, NULL, handle_size, (efi_handle_t*)&handles);
+            if(!EFI_ERROR(status)) {
                 handle_size /= (uintn_t)sizeof(efi_handle_t);
                 __blk_devs = (block_file_t*)malloc(handle_size * sizeof(block_file_t));
                 if(__blk_devs) {
@@ -245,10 +241,9 @@ FILE *fopen (const char_t *__filename, const char_t *__modes)
                                 __blk_ndevs++;
                 } else
                     __blk_ndevs = 0;
-                free(handles);
             }
         }
-        if(par >= 0 && par < __blk_ndevs)
+        if(__blk_ndevs && par >= 0 && par < __blk_ndevs)
             return (FILE*)__blk_devs[par].bio;
         errno = ENOENT;
         return NULL;
@@ -358,8 +353,8 @@ int fseek (FILE *__stream, long int __off, int __whence)
     off_t off = 0;
     efi_status_t status;
     efi_guid_t infoGuid = EFI_FILE_INFO_GUID;
-    efi_file_info_t *info;
-    uintn_t infosiz = sizeof(efi_file_info_t) + 16, i;
+    efi_file_info_t info;
+    uintn_t fsiz = sizeof(efi_file_info_t), i;
     if(__stream == stdin || __stream == stdout || __stream == stderr) {
         errno = ESPIPE;
         return -1;
@@ -390,9 +385,9 @@ int fseek (FILE *__stream, long int __off, int __whence)
         }
     switch(__whence) {
         case SEEK_END:
-            status = __stream->GetInfo(__stream, &infoGuid, &infosiz, info);
+            status = __stream->GetInfo(__stream, &infoGuid, &fsiz, &info);
             if(!EFI_ERROR(status)) {
-                off = info->FileSize + __off;
+                off = info.FileSize + __off;
                 status = __stream->SetPosition(__stream, off);
             }
             break;
@@ -571,8 +566,10 @@ copystring:     if(p==NULL) {
                             case CL('\v'): *dst++ = CL('v'); break;
                             default: *dst++ = *p++; break;
                         }
-                    } else
+                    } else {
+                        if(*p == CL('\n') && (orig == dst || *(dst - 1) != CL('\r'))) *dst++ = CL('\r');
                         *dst++ = *p++;
+                    }
                 }
             } else
 #if !defined(USE_UTF8) || !USE_UTF8
@@ -678,10 +675,10 @@ int vprintf(const char_t* fmt, __builtin_va_list args)
     wchar_t dst[BUFSIZ];
 #if USE_UTF8
     char_t tmp[BUFSIZ];
-    ret = vsnprintf(tmp, sizeof(tmp), fmt, args);
+    ret = vsnprintf(tmp, BUFSIZ, fmt, args);
     mbstowcs(dst, tmp, BUFSIZ - 1);
 #else
-    ret = vsnprintf(dst, sizeof(dst), fmt, args);
+    ret = vsnprintf(dst, BUFSIZ, fmt, args);
 #endif
     ST->ConOut->OutputString(ST->ConOut, (wchar_t *)&dst);
     return ret;
@@ -700,10 +697,10 @@ int vfprintf (FILE *__stream, const char_t *__format, __builtin_va_list args)
     char_t tmp[BUFSIZ];
     uintn_t ret, bs, i;
 #if USE_UTF8
-    ret = vsnprintf(tmp, sizeof(tmp), __format, args);
+    ret = vsnprintf(tmp, BUFSIZ, __format, args);
     ret = mbstowcs(dst, tmp, BUFSIZ - 1);
 #else
-    ret = vsnprintf(dst, sizeof(dst), __format, args);
+    ret = vsnprintf(dst, BUFSIZ, __format, args);
 #endif
     if(ret < 1 || __stream == stdin) return 0;
     for(i = 0; i < __blk_ndevs; i++)

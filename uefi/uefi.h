@@ -1339,21 +1339,12 @@ extern int getchar_ifany (void);
 extern int putchar (int __c);
 
 /* string.h */
-#ifndef __clang__
-#define memcpy  __builtin_memcpy
-#define memmove __builtin_memmove
-#define memset  __builtin_memset
-#define memcmp  __builtin_memcmp
-#define memchr  __builtin_memchr
-#define memrchr __builtin_memrchr
-#else
 extern void *memcpy (void *__dest, const void *__src, size_t __n);
 extern void *memmove (void *__dest, const void *__src, size_t __n);
 extern void *memset (void *__s, int __c, size_t __n);
 extern int memcmp (const void *__s1, const void *__s2, size_t __n);
 extern void *memchr (const void *__s, int __c, size_t __n);
 extern void *memrchr (const void *__s, int __c, size_t __n);
-#endif
 void *memmem(const void *haystack, size_t hl, const void *needle, size_t nl);
 void *memrmem(const void *haystack, size_t hl, const void *needle, size_t nl);
 extern char_t *strcpy (char_t *__dest, const char_t *__src);

@@ -74,7 +74,7 @@ ifneq ($(USE_GCC),)
 	@rm $@ 2>/dev/null || true
 	$(AR) -frsv $@ $(LIBOBJS) >/dev/null
 else
-	true
+	@true
 endif
 
 $(TARGET): $(TARGET).so
