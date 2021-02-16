@@ -214,9 +214,11 @@ Special "device files" you can open:
 
 With disk devices, `fread` and `fwrite` arguments look like this (because UEFI can't handle position internally):
 ```c
-fread(ptr, buffer size, lba number, stream)
-fwrite(ptr, buffer size, lba number, stream)
+nrblocks fread(ptr, buffer size, lba number, stream);
+nrblocks fwrite(ptr, buffer size, lba number, stream);
 ```
+To interpret a GPT, there are typedefs like `efi_partition_table_header_t` and `efi_partition_entry_t` which you can point
+to the read data.
 
 ### string.h
 
@@ -293,7 +295,7 @@ Calling UEFI functions is as simple as with EDK II, just do the call, no need fo
     ST->ConOut->OutputString(ST->ConOut, L"Hello World!\r\n");
 ```
 (Note: unlike with printf, with OutputString you must use `L""` and also print carrige return `L"\r"` before `L"\n"`. These
-are the small things that POSIX-UEFI does for you for make you life comfortable.)
+are the small things that POSIX-UEFI does for you to make your life comfortable.)
 
 There are two additional, non-POSIX calls in the library. One is `exit_bs()` to exit Boot Services, and the other is
 a non-blocking version `getchar_ifany()`.
