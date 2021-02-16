@@ -161,7 +161,7 @@ Because UEFI has no concept of device files nor of symlinks, dirent fields are l
 | setenv        | pretty UEFI specific                                                       |
 
 ```c
-int exit_bs()
+int exit_bs();
 ```
 Exit Boot Services. Returns 0 on success.
 
@@ -219,7 +219,11 @@ Special "device files" you can open:
 | `/dev/serial(baud)` | returns Serial IO protocol, fread, fwrite, fprintf |
 | `/dev/disk(n)`      | returns Block IO protocol, fread, fwrite           |
 
-With disk devices, `fread` and `fwrite` arguments look like this: fread(ptr, buffer size, lba number, stream).
+With disk devices, `fread` and `fwrite` arguments look like this (because UEFI can't handle position internally):
+```c
+fread(ptr, buffer size, lba number, stream)
+fwrite(ptr, buffer size, lba number, stream)
+```
 
 ### string.h
 
@@ -295,6 +299,8 @@ Calling UEFI functions is as simple as with EDK II, just do the call, no need fo
 ```c
     ST->ConOut->OutputString(ST->ConOut, L"Hello World!\r\n");
 ```
+(Note: unlike with printf, with OutputString you must use `L""` and also print carrige return `L"\r"` before `L"\n"`. These
+are the small things that POSIX-UEFI does for you for make you life comfortable.)
 
 There are two additional, non-POSIX calls in the library. One is `exit_bs()` to exit Boot Services, and the other is
 a non-blocking version `getchar_ifany()`.
