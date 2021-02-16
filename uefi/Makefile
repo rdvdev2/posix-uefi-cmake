@@ -20,10 +20,10 @@ TMP = $(LIBSRCS:.c=.o)
 LIBOBJS = $(TMP:.S=.o)
 
 # detect toolchain
-ifeq ($(wildcard /usr/bin/gcc),)
-USE_LLVM = 1
+ifeq ($(wildcard /usr/bin/clang),)
+USE_GCC = 1
 endif
-ifeq ($(USE_LLVM),)
+ifneq ($(USE_GCC),)
 ifeq ($(ARCH),x86_64)
 CFLAGS += -maccumulate-outgoing-args
 endif
@@ -65,12 +65,12 @@ endif
 all: $(ALLTARGETS)
 
 uefi/libuefi.a:
-	@make --no-print-directory -C uefi libuefi.a USE_LLVM=$(USE_LLVM) ARCH=$(ARCH)
+	@make --no-print-directory -C uefi libuefi.a USE_GCC=$(USE_GCC) ARCH=$(ARCH)
 
 libuefi.lib: $(LIBOBJS)
 
 libuefi.a: $(LIBOBJS)
-ifeq ($(USE_LLVM),)
+ifneq ($(USE_GCC),)
 	@rm $@ 2>/dev/null || true
 	$(AR) -frsv $@ $(LIBOBJS) >/dev/null
 else
@@ -78,7 +78,7 @@ else
 endif
 
 $(TARGET): $(TARGET).so
-ifeq ($(USE_LLVM),)
+ifneq ($(USE_GCC),)
 	@$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic -j .dynsym  -j .rel -j .rela -j .rel.* -j .rela.* -j .reloc --target $(EFIARCH) --subsystem=10 $^ $@ || echo target: $(EFIARCH)
 	@rm $(TARGET).so
 endif

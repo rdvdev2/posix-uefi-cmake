@@ -1,4 +1,4 @@
 TARGET = args.efi
 
-#USE_LLVM=1
+#USE_GCC=1
 include uefi/Makefile

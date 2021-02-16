@@ -58,8 +58,8 @@ int main(int argc, wchar_t **argv)
     return 0;
 }
 ```
-By default it uses the host native's GNU gcc + ld, creates a shared object and converts that into .efi file. If `USE_LLVM`
-is given, then LLVM CLang + lld used, and native PE is generated, no conversion involved.
+By default it uses Clang + lld, and PE is generated without conversion. If `USE_GCC` is set, then the host native's GNU gcc + ld
+used to create a shared object and get converted into an .efi file.
 
 ### Available Makefile Options
 
@@ -70,7 +70,7 @@ is given, then LLVM CLang + lld used, and native PE is generated, no conversion 
 | `CFLAGS`   | compiler flags you want to use (empty by default, like "-Wall -pedantic -std=c99")                   |
 | `LDFLAGS`  | linker flags you want to use (I don't think you'll ever need this, just in case)                     |
 | `LIBS`     | additional libraries you want to link with (like "-lm", only static .a libraries allowed)            |
-| `USE_LLVM` | set this if you want LLVM Clang + Lld instead of GNU gcc + ld                                        |
+| `USE_GCC`  | set this if you want native GNU gcc + ld + objccopy instead of LLVM Clang + Lld                      |
 | `ARCH`     | the target architecture                                                                              |
 
 Here's a more advanced **Makefile** example:
@@ -82,7 +82,7 @@ CFLAGS = -pedantic -Wall -Wextra -Werror --std=c11 -O2
 LDFLAGS =
 LIBS = -lm
 
-USE_LLVM = 1
+USE_GCC = 1
 include uefi/Makefile
 ```
 The build environment configurator was created in a way that it can handle any number of architectures, however

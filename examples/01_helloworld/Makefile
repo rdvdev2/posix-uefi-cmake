@@ -13,6 +13,6 @@ CFLAGS = -pedantic -Wall -Wextra -Werror --ansi -O2
 
 # leave the hard work and all the rest to posix-uefi
 
-# set this if you want LLVM Clang / Lld instead of GNU gcc / ld
-#USE_LLVM = 1
+# set this if you want GNU gcc + ld + objcopy instead of LLVM Clang + Lld
+#USE_GCC = 1
 include uefi/Makefile
