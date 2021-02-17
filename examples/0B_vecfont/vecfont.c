@@ -28,7 +28,7 @@ int main(int argc, char **argv)
     efi_guid_t gopGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
     efi_gop_t *gop = NULL;
     efi_gop_mode_info_t *info = NULL;
-    uintn_t isiz = sizeof(efi_gop_mode_info_t), currentMode, i;
+    uintn_t isiz = sizeof(efi_gop_mode_info_t);
     FILE *f;
     ssfn_font_t *font;
     long int size;

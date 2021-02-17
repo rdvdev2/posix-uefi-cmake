@@ -40,7 +40,7 @@ void __stdio_cleanup()
 {
 #if USE_UTF8
     if(__argvutf8)
-        free(__argvutf8);
+        BS->FreePool(__argvutf8);
 #endif
     if(__blk_devs) {
         free(__blk_devs);
@@ -466,7 +466,7 @@ int vsnprintf(char_t *dst, size_t maxlen, const char_t *fmt, __builtin_va_list a
     uint8_t *mem;
     int64_t arg;
     int len, sign, i, j;
-    char_t *p, *orig=dst, *end = dst + maxlen - 1, tmpstr[19], pad=CL(' '), n;
+    char_t *p, *orig=dst, *end = dst + maxlen - 1, tmpstr[19], pad, n;
     char *c;
 
     if(dst==NULL || fmt==NULL)
@@ -477,7 +477,7 @@ int vsnprintf(char_t *dst, size_t maxlen, const char_t *fmt, __builtin_va_list a
         if(*fmt==CL('%')) {
             fmt++;
             if(*fmt==CL('%')) goto put;
-            len=0;
+            len=0; pad=CL(' ');
             if(*fmt==CL('0')) pad=CL('0');
             while(*fmt>=CL('0') && *fmt<=CL('9')) {
                 len *= 10;

@@ -33,6 +33,8 @@
 int errno = 0;
 static uint64_t __srand_seed = 6364136223846793005ULL;
 extern void __stdio_cleanup();
+static uintptr_t *__stdlib_allocs = NULL;
+static uintn_t __stdlib_numallocs = 0;
 
 int atoi(const char_t *s)
 {
@@ -76,8 +78,24 @@ int64_t strtol (const char_t *s, char_t **__endptr, int __base)
 void *malloc (size_t __size)
 {
     void *ret = NULL;
-    efi_status_t status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, __size, &ret);
+    efi_status_t status;
+    uintn_t i;
+    /* this is so fucked up. UEFI firmware must keep track of allocated sizes internally, yet we must
+     * too, because realloc won't work otherwise... Why can't AllocatePool accept input addresses? */
+    for(i = 0; i < __stdlib_numallocs && __stdlib_allocs[i] != 0; i += 2);
+    if(i == __stdlib_numallocs) {
+        status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, __stdlib_numallocs + 2, &ret);
+        if(EFI_ERROR(status) || !ret) { errno = ENOMEM; return NULL; }
+        if(__stdlib_allocs) memcpy(ret, __stdlib_allocs, __stdlib_numallocs * sizeof(uintptr_t));
+        __stdlib_allocs = (uintptr_t*)ret;
+        __stdlib_allocs[i] = __stdlib_allocs[i + 1] = 0;
+        __stdlib_numallocs += 2;
+        ret = NULL;
+    }
+    status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, __size, &ret);
     if(EFI_ERROR(status) || !ret) { errno = ENOMEM; ret = NULL; }
+    __stdlib_allocs[i] = (uintptr_t)ret;
+    __stdlib_allocs[i + 1] = (uintptr_t)__size;
     return ret;
 }
 
@@ -90,35 +108,52 @@ void *calloc (size_t __nmemb, size_t __size)
 
 void *realloc (void *__ptr, size_t __size)
 {
-#if 1
-    void *ret = __ptr;
-    /* not sure if this works */
-    efi_status_t status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, __size, &ret);
+    void *ret = NULL;
+    efi_status_t status;
+    uintn_t i;
+    if(!__ptr) return malloc(__size);
+    for(i = 0; i < __stdlib_numallocs && __stdlib_allocs[i] != (uintptr_t)__ptr; i += 2);
+    if(i == __stdlib_numallocs) { errno = ENOMEM; return NULL; }
+    status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, __size, &ret);
     if(EFI_ERROR(status) || !ret) { errno = ENOMEM; ret = NULL; }
+    if(ret) {
+        memcpy(ret, (void*)__stdlib_allocs[i], __stdlib_allocs[i + 1] < __size ? __stdlib_allocs[i + 1] : __size);
+        if(__size > __stdlib_allocs[i + 1]) memset(ret + __stdlib_allocs[i + 1], 0, __size - __stdlib_allocs[i + 1]);
+    }
+    BS->FreePool((void*)__stdlib_allocs[i]);
+    __stdlib_allocs[i] = (uintptr_t)ret;
+    __stdlib_allocs[i + 1] = (uintptr_t)__size;
     return ret;
-#else
-    void *ret = malloc(__size);
-    /* this isn't perfect, because we don't know the original size... */
-    if(ret && __ptr) memcpy(ret, __ptr, __size);
-    if(__ptr) free(__ptr);
-    return ret;
-#endif
 }
 
 void free (void *__ptr)
 {
-    efi_status_t status = BS->FreePool(__ptr);
+    efi_status_t status;
+    uintn_t i;
+    for(i = 0; i < __stdlib_numallocs && __stdlib_allocs[i] != (uintptr_t)__ptr; i += 2);
+    if(i == __stdlib_numallocs) { errno = ENOMEM; return; }
+    __stdlib_allocs[i] = 0;
+    __stdlib_allocs[i + 1] = 0;
+    for(i = 0; i < __stdlib_numallocs && __stdlib_allocs[i] == 0; i += 2);
+    if(i == __stdlib_numallocs) { BS->FreePool(__stdlib_allocs); __stdlib_allocs = NULL; __stdlib_numallocs = 0; }
+    status = BS->FreePool(__ptr);
     if(EFI_ERROR(status)) errno = ENOMEM;
 }
 
 void abort ()
 {
+    if(__stdlib_allocs)
+        BS->FreePool(__stdlib_allocs);
+    __stdlib_numallocs = 0;
     __stdio_cleanup();
     BS->Exit(IM, EFI_ABORTED, 0, NULL);
 }
 
 void exit (int __status)
 {
+    if(__stdlib_allocs)
+        BS->FreePool(__stdlib_allocs);
+    __stdlib_numallocs = 0;
     __stdio_cleanup();
     BS->Exit(IM, !__status ? 0 : (__status < 0 ? EFIERR(-__status) : EFIERR(__status)), 0, NULL);
 }
@@ -128,6 +163,9 @@ int exit_bs()
     efi_status_t status;
     efi_memory_descriptor_t *memory_map = NULL;
     uintn_t cnt = 3, memory_map_size=0, map_key=0, desc_size=0, i;
+    if(__stdlib_allocs)
+        BS->FreePool(__stdlib_allocs);
+    __stdlib_numallocs = 0;
     __stdio_cleanup();
     while(cnt--) {
         status = BS->GetMemoryMap(&memory_map_size, memory_map, &map_key, &desc_size, NULL);
