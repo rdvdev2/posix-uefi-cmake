@@ -979,8 +979,9 @@ int ssfn_render(ssfn_t *ctx, ssfn_buf_t *dst, const char *str)
 
     if(!ctx || !str) return SSFN_ERR_INVINP;
     if(!*str) return 0;
+    if(*str == '\r') { dst->x = 0; return 1; }
+    if(*str == '\n') { dst->x = 0; dst->y += ctx->line ? ctx->line : ctx->size; return 1; }
 
-    /* determine the unicode from str and get a font with a fragment descriptor list for the glyph */
     if(ctx->s) {
         ctx->f = ctx->s;
         ptr = _ssfn_c(ctx->f, str, &ret, &unicode);
@@ -1022,7 +1023,6 @@ again:  if(p >= SSFN_FAMILY_BYNAME) { n = 0; m = 4; } else n = m = p;
     if(!ptr) {
         if(ctx->style & SSFN_STYLE_NODEFGLYPH) return SSFN_ERR_NOGLYPH;
         else {
-            /* get the first font in family which has a default glyph */
             unicode = 0;
             if(ctx->family >= SSFN_FAMILY_BYNAME) { n = 0; m = 4; } else n = m = ctx->family;
             for(; n <= m && !ptr; n++)
@@ -1630,7 +1630,7 @@ namespace SSFN {
             ssfn_buf_t *Text(const std::string &str, unsigned int fg)
                 { return ssfn_text(&this->ctx,(const char*)str.data(), fg); }
             ssfn_buf_t *Text(const char *str, unsigned int fg) { return ssfn_text(&this->ctx, str, fg); }
-            int LineHeight() { return this->ctx->line; }
+            int LineHeight() { return this->ctx->line ? this->ctx->line : this->ctx->size; }
             int Mem() { return ssfn_mem(&this->ctx); }
             const std::string ErrorStr(int err) { return std::string(ssfn_error(err)); }
     };

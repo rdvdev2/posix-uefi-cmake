@@ -2,7 +2,7 @@
 
 /* Scalable Screen Font (https://gitlab.com/bztsrc/scalable-font2) */
 #define SSFN_IMPLEMENTATION     /* get the normal renderer implementation */
-#define SSFN_MAXLINES 8192      /* configure for static memory management */
+#define SSFN_MAXLINES 4096      /* configure for static memory management */
 #include "ssfn.h"
 
 ssfn_buf_t dst = {0};           /* framebuffer properties */
@@ -15,12 +15,8 @@ void printString(int x, int y, char *s)
 {
     int ret;
     dst.x = x; dst.y = y;
-    do {
-        if(*s == '\r') { dst.x = 0; ret = 1; } else
-        if(*s == '\n') { dst.x = 0; dst.y += ctx.size; ret = 1; } else
-            ret = ssfn_render(&ctx, &dst, s);
+    while((ret = ssfn_render(&ctx, &dst, s)) > 0)
         s += ret;
-    } while(ret > 0);
 }
 
 /**
