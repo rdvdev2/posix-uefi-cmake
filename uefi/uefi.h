@@ -39,6 +39,8 @@ extern "C" {
 #define USE_UTF8            1
 
 /* get these from the compiler */
+#ifndef _STDINT_H
+#define _STDINT_H
 typedef char                int8_t;
 typedef unsigned char       uint8_t;
 typedef short               int16_t;
@@ -53,6 +55,7 @@ typedef unsigned long int   uintptr_t;
 typedef long long           int64_t;
 typedef unsigned long long  uint64_t;
 typedef unsigned long long  uintptr_t;
+#endif
 #endif
 extern char c_assert1[sizeof(uint32_t) == 4  ? 1 : -1];
 extern char c_assert2[sizeof(uint64_t) == 8  ? 1 : -1];
