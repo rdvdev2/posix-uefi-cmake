@@ -38,17 +38,10 @@ err:        fprintf(stderr, "unable to allocate memory\n");
         s.read_from_callbacks = 0;
         s.img_buffer = s.img_buffer_original = buff;
         s.img_buffer_end = s.img_buffer_original_end = buff + size;
-        data = (uint32_t*)stbi__png_load(&s, &w, &h, &l, 0, &ri);
-        if(!data || (l != 3 && l != 4)) {
-            fprintf(stderr, "Unable to decode png: %s\n", l < 3 ? "not RGB format" : stbi__g_failure_reason );
+        data = (uint32_t*)stbi__png_load(&s, &w, &h, &l, 4, &ri);
+        if(!data) {
+            fprintf(stdout, "Unable to decode png: %s\n", stbi__g_failure_reason);
             return 0;
-        }
-        /* if we got 24 bit RGB image, convert it to 32 bit RGBA */
-        if(l == 3) {
-            data = (uint32_t*)realloc(data, w * h * 4);
-            if(!data) goto err;
-            for(l = w * h - 1; l >= 0; l--)
-                data[l] = (*((uint32_t*)((uint8_t*)data + l * 3)) & 0xffffff);
         }
     } else {
         fprintf(stderr, "Unable to load image\n");
