@@ -29,7 +29,7 @@ int main(int argc, char **argv)
         fseek(f, 0, SEEK_SET);
         buff = (unsigned char*)malloc(size);
         if(!buff) {
-            fprintf(stderr, "unable to allocate memory\n");
+err:        fprintf(stderr, "unable to allocate memory\n");
             return 1;
         }
         fread(buff, size, 1, f);
@@ -39,9 +39,16 @@ int main(int argc, char **argv)
         s.img_buffer = s.img_buffer_original = buff;
         s.img_buffer_end = s.img_buffer_original_end = buff + size;
         data = (uint32_t*)stbi__png_load(&s, &w, &h, &l, 0, &ri);
-        if(!data) {
-            fprintf(stderr, "Unable to decode png: %s\n", stbi__g_failure_reason);
+        if(!data || (l != 3 && l != 4)) {
+            fprintf(stderr, "Unable to decode png: %s\n", data ? "not RGB format" : stbi__g_failure_reason );
             return 0;
+        }
+        /* if we got 24 bit RGB image, convert it to 32 bit RGBA */
+        if(l == 3) {
+            data = (uint32_t*)realloc(data, w * h * 4);
+            if(!data) goto err;
+            for(l = w * h - 1; l >= 0; l--)
+                data[l] = (*((uint32_t*)((uint8_t*)data + l * 3)) & 0xffffff);
         }
     } else {
         fprintf(stderr, "Unable to load image\n");
@@ -63,13 +70,13 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    /* display image */
+    /* png is RGBA, but UEFI needs BGRA */
     if(gop->Mode->Information->PixelFormat == PixelBlueGreenRedReserved8BitPerColor ||
         (gop->Mode->Information->PixelFormat == PixelBitMask && gop->Mode->Information->PixelInformation.BlueMask != 0xff0000)) {
-        /* png is RGBA, but UEFI needs BGRA */
         for(l = 0; l < w * h; l++)
             data[l] = ((data[l] & 0xff) << 16) | (data[l] & 0xff00) | ((data[l] >> 16) & 0xff);
     }
+    /* display image */
     gop->Blt(gop, data, EfiBltBufferToVideo, 0, 0, (gop->Mode->Information->HorizontalResolution - w) / 2,
         (gop->Mode->Information->VerticalResolution - h) / 2, w, h, 0);
 
