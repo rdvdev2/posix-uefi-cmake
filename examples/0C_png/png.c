@@ -29,7 +29,7 @@ int main(int argc, char **argv)
         fseek(f, 0, SEEK_SET);
         buff = (unsigned char*)malloc(size);
         if(!buff) {
-err:        fprintf(stderr, "unable to allocate memory\n");
+            fprintf(stderr, "unable to allocate memory\n");
             return 1;
         }
         fread(buff, size, 1, f);
