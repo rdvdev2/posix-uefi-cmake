@@ -43,7 +43,7 @@ int stat (const char_t *__file, struct stat *__buf)
     }
     f = fopen(__file, CL("*"));
     if(!f) {
-        memset(__buf, 0, sizeof(struct stat));
+        MEMFNC(memset)(__buf, 0, sizeof(struct stat));
         return -1;
     }
     ret = fstat(f, __buf);

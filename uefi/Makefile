@@ -62,7 +62,7 @@ else
 ALLTARGETS = uefi/crt_$(ARCH).o uefi/libuefi.a $(OBJS) $(TARGET)
 endif
 
-all: $(ALLTARGETS)
+all: $(ALLTARGETS) $(EXTRA)
 
 uefi/libuefi.a:
 	@make --no-print-directory -C uefi libuefi.a USE_GCC=$(USE_GCC) ARCH=$(ARCH)
@@ -100,7 +100,7 @@ build:
 	@cp libuefi.a uefi.h ../build/uefi
 
 clean:
-	@rm $(TARGET) *.o *.a *.lib $(LIBOBJS) 2>/dev/null || true
+	@rm $(TARGET) *.o *.a *.lib *.elf $(LIBOBJS) 2>/dev/null || true
 
 distclean: clean
 ifeq ($(wildcard uefi/Makefile),)

@@ -30,9 +30,7 @@
 
 #include <uefi.h>
 
-/* for gcc we use the built-in variants, but clang doesn't have those */
-#ifdef __clang__
-void *memcpy(void *dst, const void *src, size_t n)
+void *MEMFNC(memcpy)(void *dst, const void *src, size_t n)
 {
     uint8_t *a=(uint8_t*)dst,*b=(uint8_t*)src;
     if(src && dst && n>0) {
@@ -41,7 +39,7 @@ void *memcpy(void *dst, const void *src, size_t n)
     return dst;
 }
 
-void *memmove(void *dst, const void *src, size_t n)
+void *MEMFNC(memmove)(void *dst, const void *src, size_t n)
 {
     uint8_t *a=(uint8_t*)dst,*b=(uint8_t*)src;
     if(src && dst && n>0) {
@@ -54,7 +52,7 @@ void *memmove(void *dst, const void *src, size_t n)
     return dst;
 }
 
-void *memset(void *s, int c, size_t n)
+void *MEMFNC(memset)(void *s, int c, size_t n)
 {
     uint8_t *p=(uint8_t*)s;
     if(s && n>0) {
@@ -63,7 +61,7 @@ void *memset(void *s, int c, size_t n)
     return s;
 }
 
-int memcmp(const void *s1, const void *s2, size_t n)
+int MEMFNC(memcmp)(const void *s1, const void *s2, size_t n)
 {
     uint8_t *a=(uint8_t*)s1,*b=(uint8_t*)s2;
     if(s1 && s2 && n>0) {
@@ -75,7 +73,7 @@ int memcmp(const void *s1, const void *s2, size_t n)
     return 0;
 }
 
-void *memchr (const void *s, int c, size_t n)
+void *MEMFNC(memchr)(const void *s, int c, size_t n)
 {
     uint8_t *e, *p=(uint8_t*)s;
     if(s && n>0) {
@@ -84,7 +82,7 @@ void *memchr (const void *s, int c, size_t n)
     return NULL;
 }
 
-void *memrchr (const void *s, int c, size_t n)
+void *MEMFNC(memrchr)(const void *s, int c, size_t n)
 {
     uint8_t *e, *p=(uint8_t*)s;
     if(s && n>0) {
@@ -92,7 +90,6 @@ void *memrchr (const void *s, int c, size_t n)
     }
     return NULL;
 }
-#endif
 
 void *memmem(const void *haystack, size_t hl, const void *needle, size_t nl)
 {
@@ -100,7 +97,7 @@ void *memmem(const void *haystack, size_t hl, const void *needle, size_t nl)
     if(!haystack || !needle || !hl || !nl || nl > hl) return NULL;
     hl -= nl;
     while(hl) {
-        if(!memcmp(c, needle, nl)) return c;
+        if(!MEMFNC(memcmp)(c, needle, nl)) return c;
         c++; hl--;
     }
     return NULL;
@@ -113,7 +110,7 @@ void *memrmem(const void *haystack, size_t hl, const void *needle, size_t nl)
     hl -= nl;
     c += hl;
     while(hl) {
-        if(!memcmp(c, needle, nl)) return c;
+        if(!MEMFNC(memcmp)(c, needle, nl)) return c;
         c--; hl--;
     }
     return NULL;
@@ -178,7 +175,7 @@ char_t *strdup(const char_t *s)
 {
     int i = (strlen(s)+1) * sizeof(char_t);
     char_t *s2 = (char_t *)malloc(i);
-    if(s2 != NULL) memcpy(s2, (void*)s, i);
+    if(s2 != NULL) MEMFNC(memcpy)(s2, (void*)s, i);
     return s2;
 }
 
