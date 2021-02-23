@@ -5,7 +5,9 @@ ARCH = $(MYARCH)
 endif
 
 # get source files, generate object names
-SRCS ?= $(wildcard *.c) $(wildcard *.S)
+ifeq ($(SRCS),)
+SRCS = $(wildcard *.c) $(wildcard *.S)
+endif
 TMP = $(SRCS:.c=.o)
 OBJS = $(TMP:.S=.o)
 CFLAGS += -fshort-wchar -fno-strict-aliasing -ffreestanding -fno-stack-protector -fno-stack-check -I. -I./uefi \

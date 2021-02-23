@@ -29,7 +29,7 @@ Ez létrehozza az `build/uefi` mappát, minden szükséges fájllal együtt. Eze
  - **uefi.h**, minden az egyben C / C++ fejlécfájl
 
 Ezzel összeszerkesztheted a programodat, de nem fogod tudni újrafordítani, és a linkeléssel és konvertálással is magadra
-maradtsz.
+maradsz.
 
 Szigorúan véve csak a **crt0.o** és a **link.ld** fájlokra van szükség, ez elég ahhoz, hogy elindítsa és meghívja az alkalmazásod
 "main()" eljárását. Viszont ahhoz, hogy a libc funkciókat (mint pl. memcmp, strcpy, malloc vagy fopen) is használhasd, linkelned
@@ -76,7 +76,7 @@ használni, valamint hogy a main függvényed `wchar_t **argv` paramétert fog k
 | `TARGET`   | a cél program (szükséges megadni)                                                                    |
 | `SRCS`     | források listája, amiket fordítani kell (alapértelmezetten minden \*.c \*.S fájl)                    |
 | `CFLAGS`   | további fordító opciók (alapértelmezetten üres, pl. "-Wall -pedantic -std=c99")                      |
-| `LDFLAGS`  | további linkelő opciók (nem hiszem, hogy valaha is szökség lesz erre, csak a teljesség kedvéért)     |
+| `LDFLAGS`  | további linkelő opciók (nem hiszem, hogy valaha is szükség lesz erre, csak a teljesség kedvéért)     |
 | `LIBS`     | további függvénykönyvtárak, amikkel linkelni szeretnél (pl "-lm", csak statikus .a jöhet szóba)      |
 | `USE_GCC`  | ha beállítod, akkor natív GNU gcc + ld + objccopy környzetet használ LLVM Clang + Lld helyett        |
 | `ARCH`     | a cél architektúra                                                                                   |
@@ -140,8 +140,8 @@ valamint DT_REF típusok támogatottak.
 
 | Funkció       | Leírás                                                                     |
 |---------------|----------------------------------------------------------------------------|
-| atoi          | megszokott, de széles karakterű sztringet is elfogadhat és "0x" prefix     |
-| atol          | megszokott, de széles karakterű sztringet is elfogadhat és "0x" prefix     |
+| atoi          | megszokott, de széles karakterű sztringet és "0x" prefixet is elfogadhat   |
+| atol          | megszokott, de széles karakterű sztringet és "0x" prefixet is elfogadhat   |
 | strtol        | megszokott, de széles karakterű sztringet is elfogadhat                    |
 | malloc        | megszokott                                                                 |
 | calloc        | megszokott                                                                 |
@@ -167,7 +167,7 @@ Exit Boot Services, az UEFI sárkánylakta vidékének elhagyása. Siker esetén
 ```c
 uint8_t *getenv(char_t *name, uintn_t *len);
 ```
-A `name` környezeti változó értékének lekérdezése. Siker esetén `len` be lesz állítva, és egy frissen allokált buffert
+A `name` környezeti változó értékének lekérdezése. Siker esetén a `len` be lesz állítva, és egy frissen allokált buffert
 ad vissza. A hívó felelőssége a visszaadott buffer felszabadítása, ha már nem kell. Hiba esetén NULL-t ad vissza.
 
 ```c
@@ -203,7 +203,7 @@ Fájl megnyitási módok: `"r"` olvasás, `"w"` írás, `"a"` hozzáfűzés. UEF
 
 A sztring formázás limitált: csak számokat fogad el prefixnek, `%d`, `%x`, `%X`, `%c`, `%s`, `%q` és `%p`. Ha `USE_UTF8` nincs
 definiálva, akkor a formázás wchar_t-t használ, ezért ilyenkor támogatott a nem szabványos `%S` (UTF-8 sztring kiírás), `%Q`
-(eszképelt UTF-8 sztring kiírás). Ezek a funkciók nem foglalnak le memóriát, cserébe a teljes hossz `BUFSIZ` lehet (8k ha nem
+(eszképelt UTF-8 sztring kiírás) is. Ezek a funkciók nem foglalnak le memóriát, cserébe a teljes hossz `BUFSIZ` lehet (8k ha nem
 definiálták másképp), kivéve azokat a variánsokat, amik elfogadnak maxlen hossz paramétert. Kényelmi okokból támogatott a `%D`
 aminek `efi_physical_address_t` paramétert kell adni, és a memóriát dumpolja, 16 bájtos sorokban. A szám módosítókkal lehet
 több sort is dumpoltatni, például `%5D` 5 sort fog dumpolni (80 bájt).
