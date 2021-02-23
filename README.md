@@ -1,12 +1,12 @@
 POSIX-UEFI
 ==========
 
-<blockquote>We hate that horrible and ugly UEFI API, we want POSIX!</blockquote>
+<blockquote>We hate that horrible and ugly UEFI API, we want the usual POSIX!</blockquote>
 
 This is a very small build environment that helps you to develop for UEFI under Linux (and other POSIX systems). It was
 greatly inspired by [gnu-efi](https://sourceforge.net/projects/gnu-efi) (big big kudos to those guys), but it is a lot
-smaller, easier to integrate (works with Clang and GNU gcc both) and easier to use because it provides a POSIX like API
-for your UEFI application.
+smaller, easier to integrate (works with LLVM Clang and GNU gcc both) and easier to use because it provides a POSIX like
+API for your UEFI application.
 
 An UEFI environment consist of two parts: a firmware with GUID protocol interfaces and a user library. We cannot change
 the former, but we can make the second friendlier. That's what POSIX-UEFI does for your application. It is a small API
@@ -19,7 +19,7 @@ Distributing as Static Library
 
 In the `uefi` directory, run
 ```sh
-$ make
+$ USE_GCC=1 make
 ```
 This will create `build/uefi` with all the necessary files in it. These are:
 
@@ -34,6 +34,9 @@ the linking and converting.
 Strictly speaking you'll only need **crt0.o** and **link.ld**, that will get you started and will call your application's
 "main()", but to get libc functions like memcmp, strcpy, malloc or fopen, you'll have to link with **libuefi.a**.
 
+For now this only works with gcc, because Clang is configured in a way to directly create PE files, so it cannot create
+nor link with static ELF .a files.
+
 Distributing as Source
 ----------------------
 
@@ -45,7 +48,6 @@ This is the preferred way, as it also provides a Makefile to set up your toolcha
 
 ```
 TARGET = helloworld.efi
-
 include uefi/Makefile
 ```
 An example **helloworld.c** goes like this:
@@ -140,7 +142,7 @@ Because UEFI has no concept of device files nor of symlinks, dirent fields are l
 | strtol        | as usual, but might accept wide char strings                               |
 | malloc        | as usual                                                                   |
 | calloc        | as usual                                                                   |
-| realloc       | as usual (needs testing)                                                   |
+| realloc       | as usual                                                                   |
 | free          | as usual                                                                   |
 | abort         | as usual                                                                   |
 | exit          | as usual                                                                   |
