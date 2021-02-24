@@ -73,7 +73,7 @@ int fstat (FILE *__f, struct stat *__buf)
         errno = EINVAL;
         return -1;
     }
-    MEMFNC(memset)(__buf, 0, sizeof(struct stat));
+    memset(__buf, 0, sizeof(struct stat));
     if(__f == stdin) {
         __buf->st_mode = S_IREAD | S_IFIFO;
         return 0;
@@ -212,7 +212,7 @@ FILE *fopen (const char_t *__filename, const char_t *__modes)
         if(__modes[0] == CL('r')) { errno = EPERM; return NULL; }
         return stderr;
     }
-    if(!MEMFNC(memcmp)(__filename, CL("/dev/serial"), 11 * sizeof(char_t))) {
+    if(!memcmp(__filename, CL("/dev/serial"), 11 * sizeof(char_t))) {
         par = atol(__filename + 11);
         if(!__ser) {
             efi_guid_t serGuid = EFI_SERIAL_IO_PROTOCOL_GUID;
@@ -222,7 +222,7 @@ FILE *fopen (const char_t *__filename, const char_t *__modes)
         __ser->SetAttributes(__ser, par > 9600 ? par : 115200, 0, 1000, NoParity, 8, OneStopBit);
         return (FILE*)__ser;
     }
-    if(!MEMFNC(memcmp)(__filename, CL("/dev/disk"), 9 * sizeof(char_t))) {
+    if(!memcmp(__filename, CL("/dev/disk"), 9 * sizeof(char_t))) {
         par = atol(__filename + 9);
         if(!__blk_ndevs) {
             efi_guid_t bioGuid = EFI_BLOCK_IO_PROTOCOL_GUID;
@@ -233,7 +233,7 @@ FILE *fopen (const char_t *__filename, const char_t *__modes)
                 handle_size /= (uintn_t)sizeof(efi_handle_t);
                 __blk_devs = (block_file_t*)malloc(handle_size * sizeof(block_file_t));
                 if(__blk_devs) {
-                    MEMFNC(memset)(__blk_devs, 0, handle_size * sizeof(block_file_t));
+                    memset(__blk_devs, 0, handle_size * sizeof(block_file_t));
                     for(i = __blk_ndevs = 0; i < handle_size; i++)
                         if(!EFI_ERROR(BS->HandleProtocol(handles[i], &bioGuid, (void **) &__blk_devs[__blk_ndevs].bio)) &&
                             __blk_devs[__blk_ndevs].bio && __blk_devs[__blk_ndevs].bio->Media &&

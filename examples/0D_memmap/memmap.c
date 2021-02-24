@@ -30,7 +30,8 @@ int main(int argc, char **argv)
     /* get the memory map */
     status = BS->GetMemoryMap(&memory_map_size, NULL, &map_key, &desc_size, NULL);
     if(status != EFI_BUFFER_TOO_SMALL || !memory_map_size) goto err;
-    memory_map_size += 2 * desc_size;
+    /* in worst case malloc allocates two blocks, and each block might split a record into three, that's 4 additional records */
+    memory_map_size += 4 * desc_size;
     memory_map = (efi_memory_descriptor_t*)malloc(memory_map_size);
     if(!memory_map) {
         fprintf(stderr, "unable to allocate memory\n");

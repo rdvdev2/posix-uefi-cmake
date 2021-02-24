@@ -30,7 +30,7 @@
 
 #include <uefi.h>
 
-void *MEMFNC(memcpy)(void *dst, const void *src, size_t n)
+void *memcpy(void *dst, const void *src, size_t n)
 {
     uint8_t *a=(uint8_t*)dst,*b=(uint8_t*)src;
     if(src && dst && n>0) {
@@ -39,7 +39,7 @@ void *MEMFNC(memcpy)(void *dst, const void *src, size_t n)
     return dst;
 }
 
-void *MEMFNC(memmove)(void *dst, const void *src, size_t n)
+void *memmove(void *dst, const void *src, size_t n)
 {
     uint8_t *a=(uint8_t*)dst,*b=(uint8_t*)src;
     if(src && dst && n>0) {
@@ -52,7 +52,7 @@ void *MEMFNC(memmove)(void *dst, const void *src, size_t n)
     return dst;
 }
 
-void *MEMFNC(memset)(void *s, int c, size_t n)
+void *memset(void *s, int c, size_t n)
 {
     uint8_t *p=(uint8_t*)s;
     if(s && n>0) {
@@ -61,7 +61,7 @@ void *MEMFNC(memset)(void *s, int c, size_t n)
     return s;
 }
 
-int MEMFNC(memcmp)(const void *s1, const void *s2, size_t n)
+int memcmp(const void *s1, const void *s2, size_t n)
 {
     uint8_t *a=(uint8_t*)s1,*b=(uint8_t*)s2;
     if(s1 && s2 && n>0) {
@@ -73,7 +73,7 @@ int MEMFNC(memcmp)(const void *s1, const void *s2, size_t n)
     return 0;
 }
 
-void *MEMFNC(memchr)(const void *s, int c, size_t n)
+void *memchr(const void *s, int c, size_t n)
 {
     uint8_t *e, *p=(uint8_t*)s;
     if(s && n>0) {
@@ -82,7 +82,7 @@ void *MEMFNC(memchr)(const void *s, int c, size_t n)
     return NULL;
 }
 
-void *MEMFNC(memrchr)(const void *s, int c, size_t n)
+void *memrchr(const void *s, int c, size_t n)
 {
     uint8_t *e, *p=(uint8_t*)s;
     if(s && n>0) {
@@ -97,7 +97,7 @@ void *memmem(const void *haystack, size_t hl, const void *needle, size_t nl)
     if(!haystack || !needle || !hl || !nl || nl > hl) return NULL;
     hl -= nl;
     while(hl) {
-        if(!MEMFNC(memcmp)(c, needle, nl)) return c;
+        if(!memcmp(c, needle, nl)) return c;
         c++; hl--;
     }
     return NULL;
@@ -110,7 +110,7 @@ void *memrmem(const void *haystack, size_t hl, const void *needle, size_t nl)
     hl -= nl;
     c += hl;
     while(hl) {
-        if(!MEMFNC(memcmp)(c, needle, nl)) return c;
+        if(!memcmp(c, needle, nl)) return c;
         c--; hl--;
     }
     return NULL;
@@ -175,7 +175,7 @@ char_t *strdup(const char_t *s)
 {
     int i = (strlen(s)+1) * sizeof(char_t);
     char_t *s2 = (char_t *)malloc(i);
-    if(s2 != NULL) MEMFNC(memcpy)(s2, (void*)s, i);
+    if(s2 != NULL) memcpy(s2, (void*)s, i);
     return s2;
 }
 

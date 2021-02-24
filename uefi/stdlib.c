@@ -86,7 +86,7 @@ void *malloc (size_t __size)
     if(i == __stdlib_numallocs) {
         status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, __stdlib_numallocs + 2, &ret);
         if(EFI_ERROR(status) || !ret) { errno = ENOMEM; return NULL; }
-        if(__stdlib_allocs) MEMFNC(memcpy)(ret, __stdlib_allocs, __stdlib_numallocs * sizeof(uintptr_t));
+        if(__stdlib_allocs) memcpy(ret, __stdlib_allocs, __stdlib_numallocs * sizeof(uintptr_t));
         __stdlib_allocs = (uintptr_t*)ret;
         __stdlib_allocs[i] = __stdlib_allocs[i + 1] = 0;
         __stdlib_numallocs += 2;
@@ -102,7 +102,7 @@ void *malloc (size_t __size)
 void *calloc (size_t __nmemb, size_t __size)
 {
     void *ret = malloc(__nmemb * __size);
-    if(ret) MEMFNC(memset)(ret, 0, __nmemb * __size);
+    if(ret) memset(ret, 0, __nmemb * __size);
     return ret;
 }
 
@@ -117,8 +117,8 @@ void *realloc (void *__ptr, size_t __size)
     status = BS->AllocatePool(LIP ? LIP->ImageDataType : EfiLoaderData, __size, &ret);
     if(EFI_ERROR(status) || !ret) { errno = ENOMEM; ret = NULL; }
     if(ret) {
-        MEMFNC(memcpy)(ret, (void*)__stdlib_allocs[i], __stdlib_allocs[i + 1] < __size ? __stdlib_allocs[i + 1] : __size);
-        if(__size > __stdlib_allocs[i + 1]) MEMFNC(memset)(ret + __stdlib_allocs[i + 1], 0, __size - __stdlib_allocs[i + 1]);
+        memcpy(ret, (void*)__stdlib_allocs[i], __stdlib_allocs[i + 1] < __size ? __stdlib_allocs[i + 1] : __size);
+        if(__size > __stdlib_allocs[i + 1]) memset(ret + __stdlib_allocs[i + 1], 0, __size - __stdlib_allocs[i + 1]);
     }
     BS->FreePool((void*)__stdlib_allocs[i]);
     __stdlib_allocs[i] = (uintptr_t)ret;
@@ -311,7 +311,7 @@ uint8_t *getenv(char_t *name, uintn_t *len)
         *len = 0;
         return NULL;
     }
-    MEMFNC(memcpy)(ret, tmp, *len);
+    memcpy(ret, tmp, *len);
     ret[*len] = 0;
     return ret;
 }

@@ -1342,24 +1342,12 @@ extern int getchar_ifany (void);
 extern int putchar (int __c);
 
 /* string.h */
-#ifdef __clang__
-#define MEMFNC(a) a
-#else
-/* workaround an extremely annoying GCC bug with buggy builtins, incorrectly inlined even with -fno-builtin */
-#define MEMFNC(a) __uefi_##a
-#define memcpy __uefi_memcpy
-#define memmove __uefi_memmove
-#define memset __uefi_memset
-#define memcmp __uefi_memcmp
-#define memchr __uefi_memchr
-#define memrchr __uefi_memrchr
-#endif
-extern void *MEMFNC(memcpy) (void *__dest, const void *__src, size_t __n);
-extern void *MEMFNC(memmove) (void *__dest, const void *__src, size_t __n);
-extern void *MEMFNC(memset) (void *__s, int __c, size_t __n);
-extern int MEMFNC(memcmp) (const void *__s1, const void *__s2, size_t __n);
-extern void *MEMFNC(memchr) (const void *__s, int __c, size_t __n);
-extern void *MEMFNC(memrchr) (const void *__s, int __c, size_t __n);
+extern void *memcpy(void *__dest, const void *__src, size_t __n);
+extern void *memmove(void *__dest, const void *__src, size_t __n);
+extern void *memset(void *__s, int __c, size_t __n);
+extern int memcmp(const void *__s1, const void *__s2, size_t __n);
+extern void *memchr(const void *__s, int __c, size_t __n);
+extern void *memrchr(const void *__s, int __c, size_t __n);
 void *memmem(const void *haystack, size_t hl, const void *needle, size_t nl);
 void *memrmem(const void *haystack, size_t hl, const void *needle, size_t nl);
 extern char_t *strcpy (char_t *__dest, const char_t *__src);
