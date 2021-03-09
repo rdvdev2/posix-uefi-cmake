@@ -1,5 +1,6 @@
 /*
  * uefi.h
+ * https://gitlab.com/bztsrc/posix-uefi
  *
  * Copyright (C) 2021 bzt (bztsrc@gitlab)
  *
