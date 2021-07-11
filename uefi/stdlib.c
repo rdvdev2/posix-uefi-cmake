@@ -118,7 +118,7 @@ void *realloc (void *__ptr, size_t __size)
     if(EFI_ERROR(status) || !ret) { errno = ENOMEM; ret = NULL; }
     if(ret) {
         memcpy(ret, (void*)__stdlib_allocs[i], __stdlib_allocs[i + 1] < __size ? __stdlib_allocs[i + 1] : __size);
-        if(__size > __stdlib_allocs[i + 1]) memset(ret + __stdlib_allocs[i + 1], 0, __size - __stdlib_allocs[i + 1]);
+        if(__size > __stdlib_allocs[i + 1]) memset((uint8_t*)ret + __stdlib_allocs[i + 1], 0, __size - __stdlib_allocs[i + 1]);
     }
     BS->FreePool((void*)__stdlib_allocs[i]);
     __stdlib_allocs[i] = (uintptr_t)ret;
@@ -162,7 +162,7 @@ int exit_bs()
 {
     efi_status_t status;
     efi_memory_descriptor_t *memory_map = NULL;
-    uintn_t cnt = 3, memory_map_size=0, map_key=0, desc_size=0, i;
+    uintn_t cnt = 3, memory_map_size=0, map_key=0, desc_size=0;
     if(__stdlib_allocs)
         BS->FreePool(__stdlib_allocs);
     __stdlib_numallocs = 0;
@@ -211,7 +211,6 @@ int mblen(const char *s, size_t n)
 int mbtowc (wchar_t * __pwc, const char *s, size_t n)
 {
     wchar_t arg;
-    const char *orig = s;
     int ret = 1;
     if(!s || !*s) return 0;
     arg = (wchar_t)*s;

@@ -9,7 +9,7 @@ int main(int argc, char **argv)
     (void)argv;
     efi_status_t status;
     efi_memory_descriptor_t *memory_map = NULL, *mement;
-    uintn_t memory_map_size=0, map_key=0, desc_size=0, i;
+    uintn_t memory_map_size=0, map_key=0, desc_size=0;
     const char *types[] = {
         "EfiReservedMemoryType",
         "EfiLoaderCode",

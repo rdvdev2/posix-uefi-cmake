@@ -62,7 +62,6 @@ void __stdio_seterrno(efi_status_t status)
 
 int fstat (FILE *__f, struct stat *__buf)
 {
-    uint64_t off = 0;
     efi_guid_t infGuid = EFI_FILE_INFO_GUID;
     efi_file_info_t info;
     uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t);
@@ -433,7 +432,6 @@ int feof (FILE *__stream)
     efi_file_info_t info;
     uintn_t fsiz = (uintn_t)sizeof(efi_file_info_t), i;
     efi_status_t status;
-    int ret;
     if(__stream == stdin || __stream == stdout || __stream == stderr) {
         errno = ESPIPE;
         return 0;
@@ -467,8 +465,9 @@ int vsnprintf(char_t *dst, size_t maxlen, const char_t *fmt, __builtin_va_list a
     int64_t arg;
     int len, sign, i, j;
     char_t *p, *orig=dst, *end = dst + maxlen - 1, tmpstr[19], pad, n;
+#if !defined(USE_UTF8) || !USE_UTF8
     char *c;
-
+#endif
     if(dst==NULL || fmt==NULL)
         return 0;
 
@@ -558,7 +557,7 @@ copystring:     if(p==NULL) {
                         switch(*p) {
                             case CL('\a'): *dst++ = CL('a'); break;
                             case CL('\b'): *dst++ = CL('b'); break;
-                            case CL('\e'): *dst++ = CL('e'); break;
+                            case 27:       *dst++ = CL('e'); break; /* gcc 10.2 doesn't like CL('\e') in ansi mode */
                             case CL('\f'): *dst++ = CL('f'); break;
                             case CL('\n'): *dst++ = CL('n'); break;
                             case CL('\r'): *dst++ = CL('r'); break;
@@ -599,7 +598,7 @@ copystring:     if(p==NULL) {
                         switch(arg) {
                             case L'\a': *dst++ = L'a'; break;
                             case L'\b': *dst++ = L'b'; break;
-                            case L'\e': *dst++ = L'e'; break;
+                            case 27:    *dst++ = L'e'; break;   /* gcc 10.2 doesn't like L'\e' in ansi mode */
                             case L'\f': *dst++ = L'f'; break;
                             case L'\n': *dst++ = L'n'; break;
                             case L'\r': *dst++ = L'r'; break;
@@ -695,7 +694,7 @@ int vfprintf (FILE *__stream, const char_t *__format, __builtin_va_list args)
 {
     wchar_t dst[BUFSIZ];
     char_t tmp[BUFSIZ];
-    uintn_t ret, bs, i;
+    uintn_t ret, i;
 #if USE_UTF8
     ret = vsnprintf(tmp, BUFSIZ, __format, args);
     ret = mbstowcs(dst, tmp, BUFSIZ - 1);

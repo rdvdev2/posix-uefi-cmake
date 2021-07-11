@@ -214,7 +214,7 @@ char_t *_strtok_r(char_t *s, const char_t *d, char_t **p)
     char_t *tok, *sp;
 
     if(d == NULL || (s == NULL && (s=*p) == NULL)) return NULL;
-again:
+
     c = *s++;
     for(sp = (char_t *)d; (sc=*sp++)!=0;) {
         if(c == sc) { *p=s; *(s-1)=0; return s-1; }

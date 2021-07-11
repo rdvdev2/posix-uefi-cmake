@@ -2,7 +2,7 @@ TARGET = exit_bs.efi
 SRCS = exit_bs.c
 EXTRA = kernel.elf
 
-USE_GCC=1
+#USE_GCC=1
 include uefi/Makefile
 
 kernel.elf:

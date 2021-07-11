@@ -62,9 +62,7 @@ int main(int argc, char **argv)
     efi_status_t status;
     efi_guid_t gopGuid = EFI_GRAPHICS_OUTPUT_PROTOCOL_GUID;
     efi_gop_t *gop = NULL;
-    efi_gop_mode_info_t *info = NULL;
-    uintn_t isiz = sizeof(efi_gop_mode_info_t);
-    int i, j;
+    int i;
 
     /* load the file */
     if((f = fopen("\\0F_exit_bs\\kernel.elf", "r"))) {

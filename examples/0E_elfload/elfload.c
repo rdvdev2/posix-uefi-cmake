@@ -59,7 +59,7 @@ int main(int argc, char **argv)
     Elf64_Ehdr *elf;
     Elf64_Phdr *phdr;
     uintptr_t entry;
-    int i, j;
+    int i;
 
     /* load the file */
     if((f = fopen("\\0E_elfload\\kernel.elf", "r"))) {
