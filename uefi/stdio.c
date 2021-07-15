@@ -56,6 +56,7 @@ void __stdio_seterrno(efi_status_t status)
         case EFI_ACCESS_DENIED & 0xffff: errno = EACCES; break;
         case EFI_VOLUME_FULL & 0xffff: errno = ENOSPC; break;
         case EFI_NOT_FOUND & 0xffff: errno = ENOENT; break;
+        case EFI_INVALID_PARAMETER & 0xffff: errno = EINVAL; break;
         default: errno = EIO; break;
     }
 }
@@ -265,11 +266,11 @@ FILE *fopen (const char_t *__filename, const char_t *__modes)
 #else
     status = __root_dir->Open(__root_dir, &ret, (wchar_t*)__filename,
 #endif
-        __modes[0] == CL('w') ? (EFI_FILE_MODE_WRITE | EFI_FILE_MODE_CREATE) : EFI_FILE_MODE_READ,
+        __modes[0] == CL('w') ? (EFI_FILE_MODE_WRITE | EFI_FILE_MODE_READ | EFI_FILE_MODE_CREATE) : EFI_FILE_MODE_READ,
         __modes[1] == CL('d') ? EFI_FILE_DIRECTORY : 0);
     if(EFI_ERROR(status)) {
 err:    __stdio_seterrno(status);
-        free(ret); ret = NULL;
+        free(ret); return NULL;
     }
     status = ret->GetInfo(ret, &infGuid, &fsiz, &info);
     if(EFI_ERROR(status)) goto err;
