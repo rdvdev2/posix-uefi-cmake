@@ -180,6 +180,15 @@ int uefi_init (
 #else
     (void)i;
 #endif
+    /* make sure SSE is enabled, because some say there are buggy firmware in the wild not doing that */
+    __asm__ __volatile__ (
+    "	movq %cr0, %rax\n"
+    "	andb $0xF1, %al\n"
+    "	movq %rax, %cr0\n"
+    "	movq %cr4, %rax\n"
+    "	orw $3 << 9, %ax\n"
+    "	mov %rax, %cr4\n"
+    );
     /* save EFI pointers and loaded image into globals */
     IM = image;
     ST = systab;
